@@ -271,6 +271,143 @@ describe("Prompt guardrails & Provider registry", () => {
     expect(secondPromptBody).toContain("previous JSON failed validation");
     expect(res.ok).toBe(true);
   });
+
+  it("compiles via NVIDIA NIM OpenAI-compatible API, unwraps fences, and retries on validation error", async () => {
+    let calls = 0;
+    let seenUrl = "";
+    let seenAuth = "";
+    let enableThinking: unknown;
+
+    const validSpec = {
+      title: "BTC/USDT > $100,000 in 5 minutes",
+      question: "Will BTC/USDT be above $100,000 in 5 minutes?",
+      category: "Crypto",
+      resolution_track: "auto_api",
+      rules: "Resolves YES if Binance BTCUSDT 1m close exceeds 100000.",
+      betting_cutoff_utc: "2026-11-19T12:04:00Z",
+      deadline_utc: "2026-11-19T12:05:00Z",
+      resolve_after_utc: "2026-11-19T12:06:00Z",
+      oracle_config: {
+        provider: "binance",
+        params: { symbol: "BTCUSDT", interval: "1m", limit: 1 },
+        value_path: "[0][4]",
+        condition: { operator: ">", threshold: 100000 },
+      },
+      assumptions: ["Referenced to Binance BTCUSDT spot"],
+    };
+
+    const mockFetch: FetchLike = async (url, init) => {
+      calls++;
+      seenUrl = String(url);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      seenAuth = headers.Authorization ?? headers.authorization ?? "";
+      const bodyObj = JSON.parse(String(init?.body ?? "{}")) as {
+        chat_template_kwargs?: { enable_thinking?: boolean };
+      };
+      enableThinking = bodyObj.chat_template_kwargs?.enable_thinking;
+
+      const content =
+        calls === 1
+          ? JSON.stringify({ ...validSpec, title: "" })
+          : `\`\`\`json\n${JSON.stringify(validSpec)}\n\`\`\``;
+
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const res = await compileMarketPrompt({
+      prompt: "Will BTC be above $100,000 in 5 minutes?",
+      now: FIXED_NOW,
+      apiKey: "nvapi-test-key",
+      fetchFn: mockFetch,
+    });
+
+    expect(calls).toBe(2);
+    expect(seenUrl).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(seenAuth).toBe("Bearer nvapi-test-key");
+    expect(enableThinking).toBe(false);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.model).toBe("nvidia/nemotron-3.5-lightning-30b-a3b");
+    }
+  });
+
+  it("normalizes 1-element Open-Meteo param arrays & operator aliases and surfaces field-level union errors", async () => {
+    const rainPayload = {
+      title: "Rain in Karawang, Jawa Barat tomorrow",
+      question: "Will it rain in Karawang, Jawa Barat tomorrow?",
+      category: "Weather",
+      resolution_track: "auto_api",
+      rules: "Resolves YES if Open-Meteo daily precipitation_sum exceeds 0mm on 2026-11-20.",
+      betting_cutoff_utc: "2026-11-20T00:00:00Z",
+      deadline_utc: "2026-11-20T23:59:59Z",
+      resolve_after_utc: "2026-11-21T03:00:00Z",
+      invalid_conditions: ["Open-Meteo unavailable"],
+      assumptions: ["Karawang lat -6.4667, lon 107.45, timezone Asia/Jakarta"],
+      oracle_config: {
+        provider: "open-meteo",
+        params: {
+          latitude: "-6.4667",
+          longitude: "107.45",
+          daily: ["precipitation_sum"],
+          timezone: "Asia/Jakarta",
+          start_date: "2026-11-20",
+          end_date: "2026-11-20",
+        },
+        value_path: "daily.precipitation_sum[0]",
+        condition: { operator: "greater_than", threshold: "0" },
+      },
+    };
+
+    const rainFetch: FetchLike = async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(rainPayload) } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const compiled = await compileMarketPrompt({
+      prompt: "in karawang jawabarat , Will it rain tomorrow?",
+      timezone: "Asia/Jakarta",
+      now: FIXED_NOW,
+      apiKey: "nvapi-test-key",
+      fetchFn: rainFetch,
+    });
+
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect(compiled.auditUrl).toMatch(/^https:\/\/api\.open-meteo\.com\/v1\/forecast\?/);
+      expect(isAutoApiConfig(compiled.spec.oracle_config)).toBe(true);
+      if (isAutoApiConfig(compiled.spec.oracle_config)) {
+        expect(compiled.spec.oracle_config.params.daily).toBe("precipitation_sum");
+        expect(compiled.spec.oracle_config.condition).toEqual({ operator: ">", threshold: 0 });
+      }
+    }
+
+    const multiArraySpec = {
+      ...rainPayload,
+      oracle_config: {
+        ...rainPayload.oracle_config,
+        params: {
+          ...rainPayload.oracle_config.params,
+          latitude: -6.4667,
+          longitude: 107.45,
+          daily: ["precipitation_sum", "rain_sum"],
+        },
+        condition: { operator: ">", threshold: 0 },
+      },
+    };
+    const invalid = validateFullMarketSpec(multiArraySpec, { now: FIXED_NOW });
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.errors.some((e) => e.includes("oracle_config.params.daily"))).toBe(true);
+    }
+  });
 });
 
 describe("Draft market persistence (createMarketDraft & updateMarketDraft)", () => {

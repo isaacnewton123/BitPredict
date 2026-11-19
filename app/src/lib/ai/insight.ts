@@ -5,6 +5,7 @@ import type { FetchLike } from "@/lib/domain/constants";
 import { impliedYesProbability } from "@/lib/domain/pool";
 import { type AutoApiOracleConfig, isAutoApiConfig } from "@/lib/domain/market-spec";
 import { sha256Hex } from "@/lib/domain/spec-hash";
+import { callLlmJson, resolveLlmConfig, type LlmProvider } from "./llm";
 
 export const INSIGHT_DISCLAIMER =
   "AI-generated, not financial advice, does not affect resolution.";
@@ -136,7 +137,13 @@ function buildDeterministicInsight(market: schema.Market, nowIso: string): Marke
 export async function getOrGenerateMarketInsight(
   db: LibSQLDatabase<typeof schema>,
   marketIdOrSlug: string,
-  opts: { apiKey?: string; fetchFn?: FetchLike } = {},
+  opts: {
+    apiKey?: string;
+    model?: string;
+    provider?: LlmProvider;
+    baseUrl?: string;
+    fetchFn?: FetchLike;
+  } = {},
 ): Promise<MarketInsight | null> {
   const mktRows = await db
     .select()
@@ -170,67 +177,57 @@ export async function getOrGenerateMarketInsight(
   const promptText = `Market: ${market.spec.question}\nCategory: ${market.category}\nTrack: ${market.track}\nRules: ${market.spec.rules}\nDeadline: ${market.spec.deadline_utc}\nSources: ${baseline.sources.join(", ")}`;
   const promptSha256 = sha256Hex(promptText);
 
-  const apiKey = (opts.apiKey ?? process.env.GEMINI_API_KEY)?.trim();
+  const llm = resolveLlmConfig({
+    apiKey: opts.apiKey,
+    model: opts.model,
+    provider: opts.provider,
+    baseUrl: opts.baseUrl,
+    fetchFn: opts.fetchFn,
+  });
   let result: MarketInsight = baseline;
 
-  if (apiKey) {
-    const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-    const fetchImpl = opts.fetchFn ?? fetch;
+  if (llm) {
     try {
-      const res = await fetchImpl(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(8_000),
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [
-                {
-                  text: `You write concise, neutral informational context briefs for prediction markets. Never give betting advice or predict guaranteed winners. Output strict JSON: { "summary": string (2-3 sentences), "data_points": [{ "label": string, "value": string }], "sources": string[] }.`,
-                },
-              ],
-            },
-            contents: [{ role: "user", parts: [{ text: promptText }] }],
-            generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
-          }),
-        },
-      );
-      if (res.ok) {
-        const data = (await res.json()) as {
-          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-        };
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) {
-          const parsed = JSON.parse(rawText) as Partial<MarketInsight>;
-          if (typeof parsed.summary === "string" && parsed.summary.trim().length > 10) {
-            const validPoints = Array.isArray(parsed.data_points)
-              ? parsed.data_points.filter(
-                  (d): d is InsightDataPoint =>
-                    Boolean(d) &&
-                    typeof d.label === "string" &&
-                    d.label.trim().length > 0 &&
-                    typeof d.value === "string" &&
-                    d.value.trim().length > 0,
-                )
-              : [];
-            const validSources = Array.isArray(parsed.sources)
-              ? parsed.sources.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
-              : [];
+      const parsed = (await callLlmJson({
+        config: llm,
+        systemPrompt:
+          'You write concise, neutral informational context briefs for prediction markets. Never give betting advice or predict guaranteed winners. Output strict JSON: { "summary": string (2-3 sentences), "data_points": [{ "label": string, "value": string }], "sources": string[] }.',
+        userPrompt: promptText,
+        temperature: 0.2,
+        maxTokens: 768,
+        timeoutMs: 10_000,
+        fetchFn: opts.fetchFn,
+      })) as Partial<MarketInsight>;
+      if (typeof parsed.summary === "string" && parsed.summary.trim().length > 10) {
+        const validPoints = Array.isArray(parsed.data_points)
+          ? parsed.data_points.filter(
+              (d): d is InsightDataPoint =>
+                Boolean(d) &&
+                typeof d.label === "string" &&
+                d.label.trim().length > 0 &&
+                typeof d.value === "string" &&
+                d.value.trim().length > 0,
+            )
+          : [];
+        const validSources = Array.isArray(parsed.sources)
+          ? parsed.sources.filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+          : [];
 
-            result = {
-              summary: parsed.summary.trim(),
-              data_points: validPoints.length > 0 ? validPoints.slice(0, 6) : baseline.data_points,
-              sources: validSources.length > 0 ? validSources.slice(0, 6) : baseline.sources,
-              disclaimer: INSIGHT_DISCLAIMER,
-              model,
-              generated_at: nowIso,
-            };
-          }
-        }
+        result = {
+          summary: parsed.summary.trim(),
+          data_points:
+            validPoints.length > 0 ? validPoints.slice(0, 6) : baseline.data_points,
+          sources:
+            validSources.length > 0 ? validSources.slice(0, 6) : baseline.sources,
+          disclaimer: INSIGHT_DISCLAIMER,
+          model: llm.model,
+          generated_at: nowIso,
+        };
       }
     } catch {
-      // Deterministic baseline remains fallback when Gemini is unreachable
+      // Deterministic baseline remains fallback when LLM is unreachable
     }
   }
 

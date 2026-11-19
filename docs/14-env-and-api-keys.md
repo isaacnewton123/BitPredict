@@ -5,7 +5,7 @@ BitPredict separates configuration into two environment files:
 - [`frontend/.env`](../frontend/.env) — Next.js frontend settings (backend proxy, public API URL, Nostr relays)
 - [`app/.env`](../app/.env) — Elysia backend API settings (database, auth secret, Gemini AI, Lightning/LNbits, Nostr keys, oracle parameters)
 
-> **Security note:** `.gitignore` ignores `.env` and `.env.local` in both folders. Keep `.env.example` committed without real secrets, and never commit live admin keys (`LNBITS_ADMIN_KEY`, `PLATFORM_NOSTR_SECRET_KEY`, `AUTH_SECRET`, `DATABASE_AUTH_TOKEN`, or `GEMINI_API_KEY`).
+> **Security note:** `.gitignore` ignores `.env` and `.env.local` in both folders. Keep `.env.example` committed without real secrets, and never commit live admin keys (`LNBITS_ADMIN_KEY`, `PLATFORM_NOSTR_SECRET_KEY`, `AUTH_SECRET`, `DATABASE_AUTH_TOKEN`, `NVIDIA_API_KEY`, or `GEMINI_API_KEY`).
 
 ---
 
@@ -41,9 +41,21 @@ Copy `app/.env.example` to `app/.env` (already created with working local `DEMO_
 | --- | --- | --- |
 | `AUTH_SECRET` | 64-char hex string | Required in production (`NODE_ENV=production`) for HMAC signing auth challenges & session cookies. Generate locally with: `openssl rand -hex 32` or `bun -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 
-### Google Gemini AI (`GEMINI_API_KEY`)
+### NVIDIA NIM AI (`NVIDIA_API_KEY`) — Free Hosted Option
 
-The AI Market Creator uses Gemini when configured and falls back cleanly to the deterministic rule compiler when empty.
+The AI Market Creator, Market Insight briefs, and Evidence Summarizer support **NVIDIA NIM** (OpenAI-compatible REST API) as well as Google Gemini, falling back cleanly to the deterministic rule compiler when both API keys are blank.
+
+1. Visit **NVIDIA Build**: <https://build.nvidia.com>
+2. Sign in and click **Get API Key** on any hosted chat model (for example `nvidia/nemotron-3.5-lightning-30b-a3b`).
+3. Copy the key (`nvapi-...`) into `NVIDIA_API_KEY=` in `app/.env` (never commit `app/.env` or paste real keys into `.env.example`).
+4. Set:
+   - `AI_PROVIDER=nvidia` (or `auto` to prefer NVIDIA NIM when `NVIDIA_API_KEY` is present)
+   - `NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1` (or your self-hosted NIM endpoint)
+   - `NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`
+
+### Google Gemini AI (`GEMINI_API_KEY`) — Optional Alternative
+
+Used when `AI_PROVIDER=gemini`, or when `AI_PROVIDER=auto` and `NVIDIA_API_KEY` is blank.
 
 1. Visit **Google AI Studio**: <https://aistudio.google.com/app/apikey>
 2. Sign in with your Google account and click **Create API key**.

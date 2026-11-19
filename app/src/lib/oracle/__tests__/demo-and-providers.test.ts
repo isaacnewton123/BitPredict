@@ -348,4 +348,37 @@ describe("AI Market Insight caching & Idempotent Demo Seeder", () => {
     expect(res!.summary).toContain("ECB daily EUR/USD");
     expect(res!.disclaimer).toBe(INSIGHT_DISCLAIMER);
   });
+
+  it("parses NVIDIA NIM OpenAI-compatible insight JSON and preserves disclaimer", async () => {
+    let seenUrl = "";
+    const nvidiaFetch: FetchLike = async (url) => {
+      seenUrl = String(url);
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  summary: "CoinGecko spot feeds track live Bitcoin pricing across aggregated exchanges.",
+                  data_points: [{ label: "Source", value: "CoinGecko API" }],
+                  sources: ["https://www.coingecko.com/"],
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const res = await getOrGenerateMarketInsight(db, "demo-bitcoin-github-stars", {
+      apiKey: "nvapi-test-key",
+      fetchFn: nvidiaFetch,
+    });
+    expect(seenUrl).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(res).not.toBeNull();
+    expect(res!.model).toBe("nvidia/nemotron-3.5-lightning-30b-a3b");
+    expect(res!.summary).toContain("CoinGecko spot feeds");
+    expect(res!.disclaimer).toBe(INSIGHT_DISCLAIMER);
+  });
 });

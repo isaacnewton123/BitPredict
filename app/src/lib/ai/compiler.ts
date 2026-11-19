@@ -2,6 +2,7 @@ import type { FetchLike } from "@/lib/domain/constants";
 import { sha256Hex } from "@/lib/domain/spec-hash";
 import type { MarketSpec } from "@/lib/domain/market-spec";
 import { sanitizeAndCheckPrompt } from "./guardrails";
+import { callLlmJson, resolveLlmConfig, type LlmProvider } from "./llm";
 import { buildMarketSystemPrompt, buildMarketUserPrompt } from "./prompt-template";
 import { compilePromptRuleBased } from "./rule-compiler";
 import { validateFullMarketSpec } from "./validate-spec";
@@ -27,43 +28,78 @@ export type CompileMarketResult =
       latencyMs: number;
     };
 
-async function callGeminiJson(opts: {
-  apiKey: string;
-  model: string;
-  systemPrompt: string;
-  userPrompt: string;
-  fetchFn: FetchLike;
-}): Promise<unknown> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    opts.model,
-  )}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
+const NUMERIC_ORACLE_PARAM_KEYS = new Set(["latitude", "longitude", "startTime", "limit"]);
 
-  const res = await opts.fetchFn(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(12_000),
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: opts.systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: opts.userPrompt }] }],
-      generationConfig: {
-        temperature: 0,
-        responseMimeType: "application/json",
-      },
-    }),
-  });
+const OPERATOR_ALIASES: Record<string, string> = {
+  gt: ">",
+  greater_than: ">",
+  gte: ">=",
+  greater_than_or_equal: ">=",
+  lt: "<",
+  less_than: "<",
+  lte: "<=",
+  less_than_or_equal: "<=",
+  eq: "==",
+  equal: "==",
+  equals: "==",
+  ne: "!=",
+  neq: "!=",
+  not_equal: "!=",
+  not_equals: "!=",
+};
 
-  if (!res.ok) {
-    throw new Error(`LLM HTTP ${res.status}`);
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/**
+ * Normalizes minor LLM JSON formatting quirks (1-element primitive param arrays, numeric strings,
+ * word comparison operators) before running strict schema, registry, and SSRF validation.
+ */
+export function normalizeLlmMarketSpecCandidate(raw: unknown): unknown {
+  if (!isPlainRecord(raw)) return raw;
+  if (!isPlainRecord(raw.oracle_config)) return raw;
+
+  const oracleConfig: Record<string, unknown> = { ...raw.oracle_config };
+
+  if (isPlainRecord(oracleConfig.params)) {
+    const nextParams: Record<string, unknown> = {};
+    for (const [k, rawVal] of Object.entries(oracleConfig.params)) {
+      let val = rawVal;
+      if (
+        Array.isArray(val) &&
+        val.length === 1 &&
+        (typeof val[0] === "string" || typeof val[0] === "number" || typeof val[0] === "boolean")
+      ) {
+        val = val[0];
+      }
+      if (NUMERIC_ORACLE_PARAM_KEYS.has(k) && typeof val === "string") {
+        const trimmed = val.trim();
+        if (trimmed !== "" && Number.isFinite(Number(trimmed))) {
+          val = Number(trimmed);
+        }
+      }
+      nextParams[k] = val;
+    }
+    oracleConfig.params = nextParams;
   }
 
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  if (isPlainRecord(oracleConfig.condition)) {
+    const cond: Record<string, unknown> = { ...oracleConfig.condition };
+    if (typeof cond.operator === "string") {
+      const mapped = OPERATOR_ALIASES[cond.operator.trim().toLowerCase()];
+      if (mapped) cond.operator = mapped;
+    }
+    if (typeof cond.threshold === "string" && /^-?\d+(\.\d+)?$/.test(cond.threshold.trim())) {
+      cond.threshold = Number(cond.threshold.trim());
+    }
+    oracleConfig.condition = cond;
+  }
+
+  return {
+    ...raw,
+    oracle_config: oracleConfig,
   };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new Error("Empty LLM response");
-  }
-  return JSON.parse(text);
 }
 
 export async function compileMarketPrompt(opts: {
@@ -72,6 +108,8 @@ export async function compileMarketPrompt(opts: {
   now?: Date;
   apiKey?: string;
   model?: string;
+  provider?: LlmProvider;
+  baseUrl?: string;
   fetchFn?: FetchLike;
 }): Promise<CompileMarketResult> {
   const started = performance.now();
@@ -92,9 +130,15 @@ export async function compileMarketPrompt(opts: {
 
   const now = opts.now ?? new Date();
   const userTz = opts.timezone?.trim() || "UTC";
-  const apiKey = (opts.apiKey ?? process.env.GEMINI_API_KEY)?.trim();
+  const llm = resolveLlmConfig({
+    apiKey: opts.apiKey,
+    model: opts.model,
+    provider: opts.provider,
+    baseUrl: opts.baseUrl,
+    fetchFn: opts.fetchFn,
+  });
 
-  if (!apiKey) {
+  if (!llm) {
     const model = "rule-compiler-v1";
     const draft = compilePromptRuleBased(guard.prompt, { now, timezone: userTz });
     const validated = validateFullMarketSpec(draft, { now });
@@ -124,20 +168,21 @@ export async function compileMarketPrompt(opts: {
     };
   }
 
-  const model = opts.model ?? process.env.GEMINI_MODEL?.trim() ?? "gemini-2.5-flash";
-  const fetchFn = opts.fetchFn ?? fetch;
+  const model = llm.model;
   const systemPrompt = buildMarketSystemPrompt({ nowUtc: now.toISOString(), userTz });
 
   let previousErrors: string[] | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     let raw: unknown;
     try {
-      raw = await callGeminiJson({
-        apiKey,
-        model,
+      raw = await callLlmJson({
+        config: llm,
         systemPrompt,
         userPrompt: buildMarketUserPrompt(guard.prompt, previousErrors),
-        fetchFn,
+        temperature: 0,
+        maxTokens: 1536,
+        timeoutMs: 15_000,
+        fetchFn: opts.fetchFn,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "LLM request failed";
@@ -165,7 +210,7 @@ export async function compileMarketPrompt(opts: {
       };
     }
 
-    const validated = validateFullMarketSpec(raw, { now });
+    const validated = validateFullMarketSpec(normalizeLlmMarketSpecCandidate(raw), { now });
     if (validated.ok) {
       return {
         ok: true,
