@@ -15,6 +15,17 @@ import {
 import { db } from "@/lib/db/client";
 import { listUserPositionsFromDb } from "@/lib/payments/bet-repo";
 import { listUserPayoutsFromDb } from "@/lib/payments/settlement-repo";
+import { isAuthorizedAdmin } from "@/lib/oracle/track-b-repo";
+
+function withAdminFlag<T extends { pubkey: string }>(user: T): T & { is_admin: boolean };
+function withAdminFlag<T extends { pubkey: string }>(user: T | null): (T & { is_admin: boolean }) | null;
+function withAdminFlag<T extends { pubkey: string }>(user: T | null): (T & { is_admin: boolean }) | null {
+  if (!user) return null;
+  return {
+    ...user,
+    is_admin: isAuthorizedAdmin(user.pubkey),
+  };
+}
 
 function parseNostrAuthHeader(header: string | null): unknown {
   if (!header) return null;
@@ -67,7 +78,7 @@ export const authRoutes = new Elysia({ name: "bitpredict-auth", tags: ["Auth & P
         ...sessionCookieOptions(),
       });
 
-      return { user, token };
+      return { user: withAdminFlag(user), token };
     },
     {
       body: t.Optional(
@@ -109,7 +120,7 @@ export const authRoutes = new Elysia({ name: "bitpredict-auth", tags: ["Auth & P
         return { error: { code: "UNAUTHORIZED", message: "Not logged in" } };
       }
       set.headers["cache-control"] = "no-store";
-      return { user };
+      return { user: withAdminFlag(user) };
     },
     {
       detail: {
@@ -130,7 +141,7 @@ export const authRoutes = new Elysia({ name: "bitpredict-auth", tags: ["Auth & P
       const rawAddress = body.lightning_address?.trim() ?? "";
       if (!rawAddress) {
         const updated = await updateUserLightningAddress(current.pubkey, null);
-        return { user: updated, verified_remote: false, warning: null };
+        return { user: withAdminFlag(updated), verified_remote: false, warning: null };
       }
 
       const validation = await validateLightningAddress(rawAddress);
@@ -141,7 +152,7 @@ export const authRoutes = new Elysia({ name: "bitpredict-auth", tags: ["Auth & P
 
       const updated = await updateUserLightningAddress(current.pubkey, validation.address);
       return {
-        user: updated,
+        user: withAdminFlag(updated),
         verified_remote: validation.verifiedRemote,
         warning: validation.warning ?? null,
       };

@@ -1,5 +1,6 @@
 import * as nip19 from "nostr-tools/nip19";
 import { finalizeEvent, generateSecretKey, getPublicKey, type EventTemplate } from "nostr-tools/pure";
+import { payInvoiceWithConnectedWallet } from "./lightning-wallet";
 
 export type OracleTrack = "auto_api" | "nostr_oracle";
 export type MarketSide = "YES" | "NO";
@@ -10,7 +11,8 @@ export type AppView =
   | "creator"
   | "oracle"
   | "positions"
-  | "how-it-works";
+  | "how-it-works"
+  | "admin";
 
 export type CategoryId =
   | "All"
@@ -148,6 +150,7 @@ export interface BackendUserProfile {
   npub: string;
   lightning_address: string | null;
   is_guest: boolean;
+  is_admin?: boolean;
 }
 
 export interface UserPositionItem {
@@ -313,6 +316,12 @@ export function formatSats(num: number): string {
   return Number(num).toLocaleString("en-US");
 }
 
+export function formatPubkeyShort(pubkey: string): string {
+  const clean = pubkey.trim();
+  if (clean.length <= 20) return clean;
+  return `${clean.slice(0, 10)}...${clean.slice(-6)}`;
+}
+
 export function formatUtcDisplay(iso: string | Date | undefined): string {
   if (!iso) return "TBD UTC";
   const d = typeof iso === "string" ? new Date(iso) : iso;
@@ -372,18 +381,18 @@ export async function sha256HexBrowser(input: string): Promise<string> {
 }
 
 export function resolveMarketImageUrl(
-  market: Pick<MarketItem, "imageUrl" | "category">,
-): string {
+  market: Pick<MarketItem, "imageUrl">,
+): string | null {
   const raw = market.imageUrl?.trim();
   if (raw) {
     if (raw.startsWith("/api/v1/uploads/")) {
       return `${getApiBase()}${raw}`;
     }
-    if (raw.startsWith("https://") || raw.startsWith("/markets/")) {
+    if (raw.startsWith("https://")) {
       return raw;
     }
   }
-  return `/markets/${market.category.toLowerCase()}.svg`;
+  return null;
 }
 
 export function mapBackendMarket(raw: Record<string, unknown>): MarketItem {
@@ -680,7 +689,12 @@ export async function placeAndSettleBackendBet(opts: {
     body: JSON.stringify({ side: opts.side, amount_sats: opts.amountSats }),
   });
 
-  // In simulated/NWC demo mode, confirm the invoice via webhook right away
+  // In real LNbits mode, pay the BOLT11 invoice via the user's connected WebLN/NWC wallet if linked
+  if (!order.simulated && order.bolt11) {
+    await payInvoiceWithConnectedWallet(order.bolt11);
+  }
+
+  // In simulated demo mode or immediately after wallet payment, confirm invoice via webhook
   const settled = await apiRequest<{
     pool_yes_msat: number;
     pool_no_msat: number;
@@ -767,11 +781,19 @@ export async function updateBackendLightningAddress(
   });
 }
 
-export async function claimBackendPayout(payoutId: string): Promise<void> {
+export function getPayoutLnurlWithdrawUrl(payoutId: string): string {
+  const base =
+    getApiBase() ||
+    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3001");
+  return `${base}/api/v1/payouts/${encodeURIComponent(payoutId)}/lnurlw`;
+}
+
+export async function claimBackendPayout(payoutId: string, bolt11?: string): Promise<void> {
   await ensureBackendSession();
+  const cleanBolt11 = bolt11?.trim();
   await apiRequest(`/api/v1/payouts/${encodeURIComponent(payoutId)}/claim`, {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify(cleanBolt11 ? { bolt11: cleanBolt11 } : {}),
   });
 }
 
@@ -870,4 +892,20 @@ export async function submitBackendTrackBDispute(
     method: "POST",
     body: JSON.stringify({ nostr_event: event }),
   });
+}
+
+export async function ruleBackendDispute(
+  disputeId: string,
+  outcome: "YES" | "NO" | "INVALID",
+): Promise<{ market: MarketItem }> {
+  await ensureBackendSession();
+  const res = await apiRequest<{
+    market: Record<string, unknown>;
+    dispute: TrackBDisputeRecord;
+    proposal: TrackBProposalRecord;
+  }>(`/api/v1/admin/disputes/${encodeURIComponent(disputeId)}/rule`, {
+    method: "POST",
+    body: JSON.stringify({ outcome }),
+  });
+  return { market: mapBackendMarket(res.market) };
 }

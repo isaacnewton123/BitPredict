@@ -29,11 +29,10 @@ const safeImageUrl = z
   .refine(
     (v) =>
       /^\/api\/v1\/uploads\/[A-Za-z0-9_-]+\.(png|jpe?g|webp|gif)$/i.test(v) ||
-      /^\/markets\/[A-Za-z0-9_-]+\.(svg|png|jpe?g|webp)$/i.test(v) ||
       /^https:\/\/[^\s]+$/i.test(v),
     {
       message:
-        "image_url must be an uploaded /api/v1/uploads/* path, /markets/* asset, or https:// URL",
+        "image_url must be an uploaded /api/v1/uploads/* path or https:// URL",
     },
   );
 
