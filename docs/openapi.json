@@ -1,0 +1,1115 @@
+{
+  "info": {
+    "title": "BitPredict API",
+    "description": "BitPredict REST API powered by Elysia & Scalar — Bitcoin Lightning betting, NIP-98/NIP-07 Nostr auth, AI Prompt-to-Oracle compilation, and Dual-Track Oracle settlement.",
+    "version": "1.0.0"
+  },
+  "tags": [
+    {
+      "name": "Auth & Profile",
+      "description": "NIP-07 / NIP-98 Nostr authentication and LUD-16 profiles"
+    },
+    {
+      "name": "Markets & Betting",
+      "description": "Market listings, publishing, Lightning invoices, and SSE streams"
+    },
+    {
+      "name": "AI Studio",
+      "description": "AI Prompt-to-Oracle compiler and non-binding Market Insights"
+    },
+    {
+      "name": "Oracles",
+      "description": "Track A Auto-API proofs and Track B Optimistic Oracle proposals/disputes"
+    },
+    {
+      "name": "Settlement & Ops",
+      "description": "LNbits webhooks, payouts, LNURL-withdraw, and demo seeding"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "bp_session"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {}
+  },
+  "openapi": "3.1.2",
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "API health & documentation entrypoints",
+        "tags": [
+          "Settlement & Ops"
+        ],
+        "operationId": "getIndex"
+      }
+    },
+    "/api/v1/auth/challenge": {
+      "get": {
+        "tags": [
+          "Auth & Profile"
+        ],
+        "summary": "Issue Nostr login challenge",
+        "description": "Returns a single-use NIP-98 / kind 27235 challenge string valid for 60s.",
+        "operationId": "getApiV1AuthChallenge"
+      }
+    },
+    "/api/v1/auth/nostr": {
+      "post": {
+        "tags": [
+          "Auth & Profile"
+        ],
+        "summary": "Verify Nostr login event & start session",
+        "description": "Accepts a signed kind 27235 Nostr event via JSON body or Authorization: Nostr <base64> header and sets an HTTP-only HMAC session cookie.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "event": {},
+                  "is_guest": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "event": {},
+                  "is_guest": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "event": {},
+                  "is_guest": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1AuthNostr"
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth & Profile"
+        ],
+        "summary": "Clear active session cookie",
+        "operationId": "postApiV1AuthLogout"
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "Auth & Profile"
+        ],
+        "summary": "Get current authenticated user profile",
+        "operationId": "getApiV1Me"
+      },
+      "patch": {
+        "tags": [
+          "Auth & Profile"
+        ],
+        "summary": "Update LUD-16 Lightning payout address",
+        "description": "Validates SSRF safety & remote LNURL-pay endpoint when non-empty.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lightning_address"
+                ],
+                "properties": {
+                  "lightning_address": {
+                    "maxLength": 120,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lightning_address"
+                ],
+                "properties": {
+                  "lightning_address": {
+                    "maxLength": 120,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lightning_address"
+                ],
+                "properties": {
+                  "lightning_address": {
+                    "maxLength": 120,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiV1Me"
+      }
+    },
+    "/api/v1/me/positions": {
+      "get": {
+        "tags": [
+          "Auth & Profile"
+        ],
+        "summary": "List authenticated user's bets & positions",
+        "parameters": [
+          {
+            "name": "market_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1MePositions"
+      }
+    },
+    "/api/v1/me/payouts": {
+      "get": {
+        "tags": [
+          "Auth & Profile"
+        ],
+        "summary": "List authenticated user's payouts & claim statuses",
+        "parameters": [
+          {
+            "name": "market_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1MePayouts"
+      }
+    },
+    "/api/v1/markets": {
+      "get": {
+        "tags": [
+          "Markets & Betting"
+        ],
+        "summary": "List live prediction markets",
+        "description": "Filter by category, lifecycle status, oracle track, and sort order.",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "track",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1Markets"
+      },
+      "post": {
+        "tags": [
+          "Markets & Betting"
+        ],
+        "summary": "Publish a draft market live & broadcast Nostr events",
+        "description": "Transitions a DRAFT market to OPEN and broadcasts kind 30078 (NIP-78 spec) + kind 1 social note.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "draft_id"
+                ],
+                "properties": {
+                  "draft_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "creator_signature_event": {}
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "draft_id"
+                ],
+                "properties": {
+                  "draft_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "creator_signature_event": {}
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "draft_id"
+                ],
+                "properties": {
+                  "draft_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "creator_signature_event": {}
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1Markets"
+      }
+    },
+    "/api/v1/markets/draft": {
+      "post": {
+        "tags": [
+          "AI Studio"
+        ],
+        "summary": "AI Prompt-to-Oracle draft generator",
+        "description": "Compiles a 1-sentence question into a deterministic MarketSpec validated against the provider allowlist.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "prompt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "maxLength": 80,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "prompt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "maxLength": 80,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "prompt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "maxLength": 80,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1MarketsDraft"
+      }
+    },
+    "/api/v1/markets/draft/{id}": {
+      "put": {
+        "tags": [
+          "AI Studio"
+        ],
+        "summary": "Update & re-validate a draft MarketSpec",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "spec"
+                ],
+                "properties": {
+                  "spec": {}
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "spec"
+                ],
+                "properties": {
+                  "spec": {}
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "spec"
+                ],
+                "properties": {
+                  "spec": {}
+                }
+              }
+            }
+          }
+        },
+        "operationId": "putApiV1MarketsDraftById"
+      }
+    },
+    "/api/v1/markets/{id}": {
+      "get": {
+        "tags": [
+          "Markets & Betting"
+        ],
+        "summary": "Get market details, Nostr events & SHA-256 verification",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1MarketsById"
+      }
+    },
+    "/api/v1/markets/{id}/insight": {
+      "get": {
+        "tags": [
+          "AI Studio"
+        ],
+        "summary": "Get cached non-binding AI Market Insight",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1MarketsByIdInsight"
+      }
+    },
+    "/api/v1/markets/{id}/bets": {
+      "post": {
+        "tags": [
+          "Markets & Betting"
+        ],
+        "summary": "Create a Lightning bet order (BOLT11 invoice)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "side",
+                  "amount_sats"
+                ],
+                "properties": {
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "YES",
+                      "NO"
+                    ]
+                  },
+                  "amount_sats": {
+                    "minimum": 1,
+                    "anyOf": [
+                      {
+                        "format": "integer",
+                        "default": 0,
+                        "type": "string"
+                      },
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "side",
+                  "amount_sats"
+                ],
+                "properties": {
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "YES",
+                      "NO"
+                    ]
+                  },
+                  "amount_sats": {
+                    "minimum": 1,
+                    "anyOf": [
+                      {
+                        "format": "integer",
+                        "default": 0,
+                        "type": "string"
+                      },
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "side",
+                  "amount_sats"
+                ],
+                "properties": {
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "YES",
+                      "NO"
+                    ]
+                  },
+                  "amount_sats": {
+                    "minimum": 1,
+                    "anyOf": [
+                      {
+                        "format": "integer",
+                        "default": 0,
+                        "type": "string"
+                      },
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1MarketsByIdBets"
+      }
+    },
+    "/api/v1/markets/{id}/proof": {
+      "get": {
+        "tags": [
+          "Oracles"
+        ],
+        "summary": "Get raw oracle proofs, kind 30079 attestation & disputes",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1MarketsByIdProof"
+      }
+    },
+    "/api/v1/markets/{id}/proposals": {
+      "post": {
+        "tags": [
+          "Oracles"
+        ],
+        "summary": "Submit Track B Nostr Oracle outcome proposal (Kind 30079)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nostr_event"
+                ],
+                "properties": {
+                  "nostr_event": {},
+                  "force_ready_in_demo": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nostr_event"
+                ],
+                "properties": {
+                  "nostr_event": {},
+                  "force_ready_in_demo": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nostr_event"
+                ],
+                "properties": {
+                  "nostr_event": {},
+                  "force_ready_in_demo": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1MarketsByIdProposals"
+      }
+    },
+    "/api/v1/markets/{id}/disputes": {
+      "post": {
+        "tags": [
+          "Oracles"
+        ],
+        "summary": "Challenge active Track B proposal with bond (Kind 30080)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nostr_event"
+                ],
+                "properties": {
+                  "nostr_event": {}
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nostr_event"
+                ],
+                "properties": {
+                  "nostr_event": {}
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nostr_event"
+                ],
+                "properties": {
+                  "nostr_event": {}
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1MarketsByIdDisputes"
+      }
+    },
+    "/api/v1/markets/{id}/stream": {
+      "get": {
+        "tags": [
+          "Markets & Betting"
+        ],
+        "summary": "Subscribe to real-time market pool updates (SSE)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1MarketsByIdStream"
+      }
+    },
+    "/api/v1/bets/{id}": {
+      "get": {
+        "tags": [
+          "Markets & Betting"
+        ],
+        "summary": "Get bet payment & confirmation status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1BetsById"
+      }
+    },
+    "/api/v1/webhooks/lnbits": {
+      "post": {
+        "tags": [
+          "Settlement & Ops"
+        ],
+        "summary": "LNbits incoming payment confirmation webhook",
+        "parameters": [
+          {
+            "name": "secret",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "patternProperties": {
+                  "^(.*)$": {}
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "patternProperties": {
+                  "^(.*)$": {}
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "patternProperties": {
+                  "^(.*)$": {}
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1WebhooksLnbits"
+      }
+    },
+    "/api/v1/oracle/queue": {
+      "get": {
+        "tags": [
+          "Oracles"
+        ],
+        "summary": "List Track B Nostr Oracle Signer queue with AI evidence briefs",
+        "parameters": [
+          {
+            "name": "include_open",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1OracleQueue"
+      }
+    },
+    "/api/v1/oracle/tick": {
+      "post": {
+        "tags": [
+          "Oracles"
+        ],
+        "summary": "Run Track A & Track B oracle worker tick",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "market_id": {
+                    "type": "string"
+                  },
+                  "force_demo_resolve": {
+                    "type": "boolean"
+                  },
+                  "force_finalize_proposal": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "market_id": {
+                    "type": "string"
+                  },
+                  "force_demo_resolve": {
+                    "type": "boolean"
+                  },
+                  "force_finalize_proposal": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "market_id": {
+                    "type": "string"
+                  },
+                  "force_demo_resolve": {
+                    "type": "boolean"
+                  },
+                  "force_finalize_proposal": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1OracleTick"
+      }
+    },
+    "/api/v1/payouts/{id}/claim": {
+      "post": {
+        "tags": [
+          "Settlement & Ops"
+        ],
+        "summary": "Claim a winning/refund payout with a BOLT11 invoice",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bolt11": {
+                    "maxLength": 1500,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bolt11": {
+                    "maxLength": 1500,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bolt11": {
+                    "maxLength": 1500,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1PayoutsByIdClaim"
+      }
+    },
+    "/api/v1/payouts/{id}/lnurlw": {
+      "get": {
+        "tags": [
+          "Settlement & Ops"
+        ],
+        "summary": "LUD-03 LNURL-withdraw metadata & callback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pr",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "k1",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1PayoutsByIdLnurlw"
+      }
+    },
+    "/api/v1/admin/disputes/{id}/rule": {
+      "post": {
+        "tags": [
+          "Oracles"
+        ],
+        "summary": "Admin arbitration ruling on disputed Track B market",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "outcome"
+                ],
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "YES",
+                      "NO",
+                      "INVALID"
+                    ]
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "outcome"
+                ],
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "YES",
+                      "NO",
+                      "INVALID"
+                    ]
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "outcome"
+                ],
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "YES",
+                      "NO",
+                      "INVALID"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1AdminDisputesByIdRule"
+      }
+    },
+    "/api/v1/demo/seed": {
+      "post": {
+        "tags": [
+          "Settlement & Ops"
+        ],
+        "summary": "Idempotent showcase demo seeder (3 users, 6 markets)",
+        "operationId": "postApiV1DemoSeed"
+      }
+    }
+  }
+}

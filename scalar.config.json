@@ -1,0 +1,69 @@
+{
+  "$schema": "https://registry.scalar.com/@scalar/schemas/config",
+  "scalar": "2.0.0",
+  "info": {
+    "title": "BitPredict Documentation & API",
+    "description": "Bitcoin Lightning & Nostr Prediction Market — Architecture, Dual-Track Oracles, AI Prompt-to-Oracle Studio, and Elysia REST API Reference."
+  },
+  "assetsDir": "frontend/public/brand",
+  "siteConfig": {
+    "theme": "purple",
+    "layout": {
+      "toc": true,
+      "header": true
+    }
+  },
+  "navigation": {
+    "header": [
+      { "type": "link", "title": "Guides", "to": "/" },
+      { "type": "link", "title": "API Reference", "to": "/api" },
+      { "type": "spacer" },
+      { "type": "link", "title": "Live Scalar Endpoint", "style": "button", "to": "http://localhost:3001/openapi", "newTab": true }
+    ],
+    "tabs": [
+      { "title": "Overview", "to": "/", "icon": "phosphor/regular/book-open" },
+      { "title": "Architecture & Specs", "to": "/architecture", "icon": "phosphor/regular/blueprint" },
+      { "title": "REST API", "to": "/api", "icon": "phosphor/regular/plug" }
+    ],
+    "routes": {
+      "/": {
+        "type": "page",
+        "title": "Product Overview",
+        "filepath": "docs/01-product-overview.md",
+        "icon": "phosphor/regular/rocket"
+      },
+      "/concept": {
+        "type": "page",
+        "title": "Original Concept",
+        "filepath": "docs/00-concept.md"
+      },
+      "/architecture": {
+        "type": "group",
+        "title": "Architecture & Protocol",
+        "mode": "flat",
+        "children": {
+          "/system": { "type": "page", "title": "System Architecture", "filepath": "docs/02-system-architecture.md" },
+          "/lifecycle": { "type": "page", "title": "Market Lifecycle", "filepath": "docs/03-market-lifecycle.md" },
+          "/ai-creator": { "type": "page", "title": "AI Market Creator", "filepath": "docs/04-ai-market-creator.md" },
+          "/oracles": { "type": "page", "title": "Dual-Track Oracle Design", "filepath": "docs/05-oracle-design.md" },
+          "/lightning": { "type": "page", "title": "Lightning Payments", "filepath": "docs/06-lightning-payments.md" },
+          "/nostr": { "type": "page", "title": "Nostr Integration", "filepath": "docs/07-nostr-integration.md" },
+          "/data-model": { "type": "page", "title": "Data Model", "filepath": "docs/08-data-model.md" },
+          "/api-spec": { "type": "page", "title": "API Specification Notes", "filepath": "docs/09-api-spec.md" },
+          "/security": { "type": "page", "title": "Security & Risk", "filepath": "docs/10-security-and-risk.md" },
+          "/roadmap": { "type": "page", "title": "MVP Roadmap & Demo", "filepath": "docs/11-mvp-roadmap.md" },
+          "/glossary": { "type": "page", "title": "Glossary", "filepath": "docs/12-glossary.md" },
+          "/brand": { "type": "page", "title": "Brand Identity", "filepath": "docs/13-brand-identity.md" },
+          "/env-setup": { "type": "page", "title": "Environment & API Keys", "filepath": "docs/14-env-and-api-keys.md" }
+        }
+      },
+      "/api": {
+        "type": "openapi",
+        "title": "BitPredict REST API",
+        "filepath": "docs/openapi.json",
+        "icon": "phosphor/regular/plug",
+        "singlePage": true
+      }
+    }
+  }
+}
