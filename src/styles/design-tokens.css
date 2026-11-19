@@ -1,0 +1,305 @@
+/* AUTO-GENERATED FROM DESIGN.md (1win Analysis) - DO NOT EDIT MANUALLY */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+
+:root {
+  /* Colors */
+  --color-primary: #00b24b;
+  --color-secondary: #0075ff;
+  --color-on-primary: #ffffff;
+  --color-canvas: #141415;
+  --color-surface: #2e3035;
+  --color-hairline: #2d2f33;
+  --color-ink: #f0f2f5;
+  --color-muted: #9aa1b1;
+  --color-faint: #53575f;
+  --color-black: #000000;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --text-display-size: 33px;
+  --text-display-weight: 800;
+  --text-display-lh: 1.1;
+  --text-display-ls: 0;
+  --text-heading-size: 20px;
+  --text-heading-weight: 800;
+  --text-heading-lh: 1.2;
+  --text-heading-ls: 0;
+  --text-title-size: 16px;
+  --text-title-weight: 600;
+  --text-title-lh: 1.3;
+  --text-title-ls: 0;
+  --text-body-size: 14px;
+  --text-body-weight: 600;
+  --text-body-lh: 1.4;
+  --text-body-ls: 0;
+  --text-ui-size: 13px;
+  --text-ui-weight: 600;
+  --text-ui-lh: 1.3;
+  --text-ui-ls: 0;
+  --text-caption-size: 12px;
+  --text-caption-weight: 600;
+  --text-caption-lh: 1.3;
+  --text-caption-ls: 0;
+
+  /* Border Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-card: 16px;
+  --radius-full: 999px;
+
+  /* Spacing */
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-xxl: 24px;
+  --space-xxxl: 32px;
+
+  /* Elevation */
+  --shadow-floating: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Base Surface & Typography Defaults */
+html, body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  line-height: var(--text-body-lh);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography Scale */
+.ds-text-display {
+  font-family: var(--font-sans);
+  font-size: var(--text-display-size);
+  font-weight: var(--text-display-weight);
+  line-height: var(--text-display-lh);
+  letter-spacing: var(--text-display-ls);
+}
+.ds-text-heading {
+  font-family: var(--font-sans);
+  font-size: var(--text-heading-size);
+  font-weight: var(--text-heading-weight);
+  line-height: var(--text-heading-lh);
+  letter-spacing: var(--text-heading-ls);
+}
+.ds-text-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-title-size);
+  font-weight: var(--text-title-weight);
+  line-height: var(--text-title-lh);
+  letter-spacing: var(--text-title-ls);
+}
+.ds-text-body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  line-height: var(--text-body-lh);
+  letter-spacing: var(--text-body-ls);
+}
+.ds-text-ui {
+  font-family: var(--font-sans);
+  font-size: var(--text-ui-size);
+  font-weight: var(--text-ui-weight);
+  line-height: var(--text-ui-lh);
+  letter-spacing: var(--text-ui-ls);
+}
+.ds-text-caption {
+  font-family: var(--font-sans);
+  font-size: var(--text-caption-size);
+  font-weight: var(--text-caption-weight);
+  line-height: var(--text-caption-lh);
+  letter-spacing: var(--text-caption-ls);
+}
+
+/* Core Component Primitives */
+.ds-button-primary {
+  background-color: #00b24b;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+}
+
+.ds-button-secondary {
+  background-color: #0075ff;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+}
+
+.ds-button-tertiary {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+}
+
+.ds-button-ghost {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 10px;
+  padding: 0px 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+}
+
+.ds-pill-badge {
+  background-color: #0075ff;
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 0px 4px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.ds-pill-outline {
+  color: #f0f2f5;
+  border-radius: 999px;
+  padding: 0px 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+  border: 1px solid var(--color-hairline);
+}
+
+.ds-top-nav {
+  background-color: #141415;
+  color: #f0f2f5;
+  padding: 8px 16px;
+}
+
+.ds-sidebar-rail {
+  background-color: #141415;
+  color: #9aa1b1;
+  padding: 8px;
+}
+
+.ds-game-tile {
+  background-color: #2e3035;
+  border-radius: 16px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.ds-hero-banner {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.ds-promo-card {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.ds-feature-card {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--color-hairline);
+}
+
+.ds-feature-card-elevated {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow-floating);
+}
+
+.ds-bet-odds-button {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+}
+
+.ds-betslip-panel {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.ds-text-input {
+  background-color: #2e3035;
+  color: #f0f2f5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  border: 1px solid var(--color-hairline);
+}
+
+.ds-footer {
+  background-color: #141415;
+  color: #9aa1b1;
+  padding: 24px;
+}
