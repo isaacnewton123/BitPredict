@@ -23,6 +23,20 @@ const paramValue = z
   .union([z.string().max(200), z.number(), z.boolean()])
   .refine(noUrl, { message: "URLs are not allowed in oracle params" });
 
+const safeImageUrl = z
+  .string()
+  .max(500)
+  .refine(
+    (v) =>
+      /^\/api\/v1\/uploads\/[A-Za-z0-9_-]+\.(png|jpe?g|webp|gif)$/i.test(v) ||
+      /^\/markets\/[A-Za-z0-9_-]+\.(svg|png|jpe?g|webp)$/i.test(v) ||
+      /^https:\/\/[^\s]+$/i.test(v),
+    {
+      message:
+        "image_url must be an uploaded /api/v1/uploads/* path, /markets/* asset, or https:// URL",
+    },
+  );
+
 export const ConditionSchema = z.object({
   operator: z.enum(CONDITION_OPERATORS),
   threshold: z.union([z.number(), z.string().max(100)]),
@@ -55,6 +69,7 @@ export const MarketSpecSchema = z
     category: z.enum(CATEGORIES),
     resolution_track: z.enum(RESOLUTION_TRACKS),
     rules: z.string().min(10).max(1000),
+    image_url: safeImageUrl.optional(),
     betting_cutoff_utc: isoDateTime,
     deadline_utc: isoDateTime,
     resolve_after_utc: isoDateTime,

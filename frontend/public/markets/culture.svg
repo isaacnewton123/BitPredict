@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <linearGradient id="cug" x1="0" y1="0" x2="96" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9F1239"/>
+      <stop offset="100%" stop-color="#7132F5"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="22" fill="url(#cug)"/>
+  <path d="M48 23l6.9 14 15.5 2.2-11.2 10.9 2.6 15.4L48 58.2l-13.8 7.3 2.6-15.4-11.2-10.9 15.5-2.2L48 23Z" fill="#FDE68A"/>
+</svg>

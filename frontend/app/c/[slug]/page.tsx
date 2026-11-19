@@ -9,7 +9,7 @@ async function CategoryContent({ params }: { params: Promise<{ slug: string }> }
 
 export default function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
   return (
-    <Suspense fallback={<BitPredictApp initialView="markets" />}>
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
       <CategoryContent params={params} />
     </Suspense>
   );

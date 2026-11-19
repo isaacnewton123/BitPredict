@@ -11,11 +11,12 @@ next-env.d.ts
 .env
 .env*.local
 
-# local database
+# local database & uploaded media
 data/*.db
 data/*.db-*
 **/data/*.db
 **/data/*.db-*
+**/data/uploads/
 
 # logs / os
 npm-debug.log*

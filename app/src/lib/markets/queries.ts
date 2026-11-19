@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import {
+  getMarketActivityFromDb,
   getMarketByIdOrSlugFromDb,
   getMarketEventsFromDb,
   queryMarkets,
@@ -26,4 +27,8 @@ export async function getMarketByIdOrSlug(idOrSlug: string) {
 
 export async function getMarketEvents(marketId: string) {
   return getMarketEventsFromDb(db, marketId);
+}
+
+export async function getMarketActivity(market: schema.Market) {
+  return getMarketActivityFromDb(db, market);
 }

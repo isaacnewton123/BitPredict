@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { compileMarketPrompt } from "@/lib/ai/compiler";
 import { getOrGenerateMarketInsight } from "@/lib/ai/insight";
+import { validateFullMarketSpec } from "@/lib/ai/validate-spec";
 import { getCurrentUserFromRequest } from "@/lib/auth/server";
 import { db } from "@/lib/db/client";
 import { getCategoryBySlug } from "@/lib/domain/categories";
@@ -20,7 +21,12 @@ import {
   type MarketSort,
   publishMarketDraft,
 } from "@/lib/markets/publish-repo";
-import { getMarketByIdOrSlug, getMarketEvents, listMarkets } from "@/lib/markets/queries";
+import {
+  getMarketActivity,
+  getMarketByIdOrSlug,
+  getMarketEvents,
+  listMarkets,
+} from "@/lib/markets/queries";
 import { submitTrackBDispute, submitTrackBProposal } from "@/lib/oracle/track-b-repo";
 import { getMarketProofBundleFromDb } from "@/lib/oracle/worker-repo";
 import { placeBetOrder } from "@/lib/payments/bet-repo";
@@ -101,11 +107,37 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
         };
       }
 
+      let compiledToSave = compiled;
+      const requestedImageUrl = body.image_url?.trim();
+      if (requestedImageUrl) {
+        const revalidated = validateFullMarketSpec({
+          ...compiled.spec,
+          image_url: requestedImageUrl,
+        });
+        if (!revalidated.ok) {
+          set.status = 422;
+          return {
+            error: {
+              code: "VALIDATION_FAILED",
+              message: revalidated.errors[0] ?? "Invalid cover image URL",
+              details: revalidated.errors,
+            },
+          };
+        }
+        compiledToSave = {
+          ...compiled,
+          spec: revalidated.spec,
+          specSha256: revalidated.specSha256,
+          auditUrl: revalidated.auditUrl ?? compiled.auditUrl,
+          warnings: revalidated.warnings,
+        };
+      }
+
       const draft = await createMarketDraft(db, {
         creatorPubkey: user.pubkey,
         prompt: body.prompt,
         timezone: body.timezone,
-        compiled,
+        compiled: compiledToSave,
       });
 
       set.status = 201;
@@ -115,6 +147,7 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
       body: t.Object({
         prompt: t.String({ minLength: 1 }),
         timezone: t.Optional(t.String({ maxLength: 80 })),
+        image_url: t.Optional(t.String({ maxLength: 500 })),
       }),
       detail: {
         summary: "AI Prompt-to-Oracle draft generator",
@@ -228,12 +261,17 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
         }
       }
 
-      const events = await getMarketEvents(market.id);
+      const [events, activity] = await Promise.all([
+        getMarketEvents(market.id),
+        getMarketActivity(market),
+      ]);
       const computed = computeSpecSha256(market.spec);
       set.headers["cache-control"] = "no-store";
       return {
         market,
         nostr_events: events,
+        recent_trades: activity.recent_trades,
+        probability_history: activity.probability_history,
         spec_verification: {
           computed_sha256: computed,
           committed_sha256: market.specSha256,
@@ -244,7 +282,7 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
     {
       params: t.Object({ id: t.String() }),
       detail: {
-        summary: "Get market details, Nostr events & SHA-256 verification",
+        summary: "Get market details, trade history, probability timeline & SHA-256 verification",
         tags: ["Markets & Betting"],
       },
     },

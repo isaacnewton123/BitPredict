@@ -4,6 +4,7 @@ import { Elysia } from "elysia";
 import { authRoutes } from "./routes/auth";
 import { marketRoutes } from "./routes/markets";
 import { settlementRoutes } from "./routes/settlement";
+import { uploadRoutes } from "./routes/uploads";
 
 export const app = new Elysia({ name: "bitpredict-api" })
   .use(cors({ origin: true, credentials: true }))
@@ -27,6 +28,7 @@ export const app = new Elysia({ name: "bitpredict-api" })
           { name: "AI Studio", description: "AI Prompt-to-Oracle compiler and non-binding Market Insights" },
           { name: "Oracles", description: "Track A Auto-API proofs and Track B Optimistic Oracle proposals/disputes" },
           { name: "Settlement & Ops", description: "LNbits webhooks, payouts, LNURL-withdraw, and demo seeding" },
+          { name: "Media", description: "Market cover image uploads & static serving" },
         ],
         components: {
           securitySchemes: {
@@ -91,6 +93,7 @@ export const app = new Elysia({ name: "bitpredict-api" })
   )
   .use(authRoutes)
   .use(marketRoutes)
-  .use(settlementRoutes);
+  .use(settlementRoutes)
+  .use(uploadRoutes);
 
 export type App = typeof app;

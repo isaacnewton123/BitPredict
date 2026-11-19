@@ -4,7 +4,13 @@ import { finalizeEvent, generateSecretKey, getPublicKey, type EventTemplate } fr
 export type OracleTrack = "auto_api" | "nostr_oracle";
 export type MarketSide = "YES" | "NO";
 export type MarketOutcome = "YES" | "NO" | "INVALID" | null;
-export type AppView = "markets" | "creator" | "oracle" | "positions" | "how-it-works";
+export type AppView =
+  | "markets"
+  | "market-detail"
+  | "creator"
+  | "oracle"
+  | "positions"
+  | "how-it-works";
 
 export type CategoryId =
   | "All"
@@ -83,6 +89,23 @@ export interface TrackBDisputeRecord {
   createdAt: string;
 }
 
+export interface MarketTradePoint {
+  t: string;
+  yes_pct: number;
+  no_pct: number;
+  pool_sats: number;
+}
+
+export interface MarketTradeItem {
+  id: string;
+  side: MarketSide;
+  amount_sats: number;
+  trader_label: string;
+  timestamp: string;
+  yes_pct_after: number;
+  pool_total_sats_after: number;
+}
+
 export interface MarketItem {
   id: string;
   slug: string;
@@ -92,6 +115,7 @@ export interface MarketItem {
   oracleTrack: OracleTrack;
   oracleLabel: string;
   rules: string;
+  imageUrl: string | null;
   deadline: string;
   bettingCutoffIso: string;
   deadlineIso: string;
@@ -113,6 +137,8 @@ export interface MarketDetailBundle {
   attestationEvent: Record<string, unknown> | null;
   proposals: TrackBProposalRecord[];
   disputes: TrackBDisputeRecord[];
+  recentTrades: MarketTradeItem[];
+  probabilityHistory: MarketTradePoint[];
   specVerified: boolean;
   computedSha256: string;
 }
@@ -201,6 +227,28 @@ declare global {
 const TOKEN_STORAGE_KEY = "bp_session_token";
 const GUEST_SK_STORAGE_KEY = "bp_guest_sk_hex";
 const SIGNER_SK_STORAGE_KEY = "bp_demo_signer_sk_hex";
+
+let cachedMarkets: MarketItem[] | null = null;
+let cachedUser: BackendUserProfile | null = null;
+let pendingTradeSide: { slug: string; side: MarketSide } | null = null;
+
+export function getCachedMarkets(): MarketItem[] | null {
+  return cachedMarkets;
+}
+
+export function getCachedUser(): BackendUserProfile | null {
+  return cachedUser;
+}
+
+export function setPendingTradeSide(slug: string, side: MarketSide): void {
+  pendingTradeSide = { slug, side };
+}
+
+export function consumePendingTradeSide(slug: string): MarketSide | null {
+  return pendingTradeSide && pendingTradeSide.slug === slug
+    ? pendingTradeSide.side
+    : null;
+}
 
 export function getApiBase(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
@@ -323,6 +371,21 @@ export async function sha256HexBrowser(input: string): Promise<string> {
     .join("");
 }
 
+export function resolveMarketImageUrl(
+  market: Pick<MarketItem, "imageUrl" | "category">,
+): string {
+  const raw = market.imageUrl?.trim();
+  if (raw) {
+    if (raw.startsWith("/api/v1/uploads/")) {
+      return `${getApiBase()}${raw}`;
+    }
+    if (raw.startsWith("https://") || raw.startsWith("/markets/")) {
+      return raw;
+    }
+  }
+  return `/markets/${market.category.toLowerCase()}.svg`;
+}
+
 export function mapBackendMarket(raw: Record<string, unknown>): MarketItem {
   const spec = (raw.spec ?? {}) as Record<string, unknown>;
   const track: OracleTrack = raw.track === "auto_api" ? "auto_api" : "nostr_oracle";
@@ -330,6 +393,7 @@ export function mapBackendMarket(raw: Record<string, unknown>): MarketItem {
   const noPool = Math.floor(Number(raw.poolNoMsat ?? 0) / 1000);
   const deadlineIso = String(spec.deadline_utc ?? raw.deadlineUtc ?? "");
   const cutoffIso = String(spec.betting_cutoff_utc ?? raw.bettingCutoff ?? "");
+  const rawImage = typeof spec.image_url === "string" && spec.image_url.trim() ? spec.image_url.trim() : null;
 
   return {
     id: String(raw.id),
@@ -340,6 +404,7 @@ export function mapBackendMarket(raw: Record<string, unknown>): MarketItem {
     oracleTrack: track,
     oracleLabel: track === "auto_api" ? "Auto-API" : "Nostr Oracle",
     rules: String(spec.rules ?? ""),
+    imageUrl: rawImage,
     deadline: formatUtcDisplay(deadlineIso),
     bettingCutoffIso: cutoffIso,
     deadlineIso,
@@ -361,7 +426,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const base = getApiBase();
   const token = getStoredToken();
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (token && !headers.has("Authorization")) {
@@ -395,9 +460,11 @@ export async function fetchMarketsFromBackend(): Promise<MarketItem[]> {
     // Auto-seed showcase demo data in backend database on first run when DB is empty
     await apiRequest("/api/v1/demo/seed", { method: "POST" }).catch(() => null);
     const seeded = await apiRequest<{ markets: Array<Record<string, unknown>> }>("/api/v1/markets");
-    return seeded.markets.map(mapBackendMarket);
+    cachedMarkets = seeded.markets.map(mapBackendMarket);
+    return cachedMarkets;
   }
-  return res.markets.map(mapBackendMarket);
+  cachedMarkets = res.markets.map(mapBackendMarket);
+  return cachedMarkets;
 }
 
 export async function seedDemoMarketsOnBackend(): Promise<{
@@ -410,10 +477,12 @@ export async function seedDemoMarketsOnBackend(): Promise<{
     { method: "POST" },
   );
   const list = await apiRequest<{ markets: Array<Record<string, unknown>> }>("/api/v1/markets");
+  const mapped = list.markets.map(mapBackendMarket);
+  cachedMarkets = mapped;
   return {
     created_markets: res.created_markets,
     skipped_markets: res.skipped_markets,
-    markets: list.markets.map(mapBackendMarket),
+    markets: mapped,
   };
 }
 
@@ -421,6 +490,8 @@ export async function fetchMarketDetailBundle(idOrSlug: string): Promise<MarketD
   const [detailRes, insightRes, proofRes] = await Promise.all([
     apiRequest<{
       market: Record<string, unknown>;
+      recent_trades?: MarketTradeItem[];
+      probability_history?: MarketTradePoint[];
       spec_verification: { computed_sha256: string; verified: boolean };
     }>(`/api/v1/markets/${encodeURIComponent(idOrSlug)}`),
     apiRequest<{ insight: MarketInsightData }>(
@@ -446,18 +517,25 @@ export async function fetchMarketDetailBundle(idOrSlug: string): Promise<MarketD
     attestationEvent: (proofRes.attestation_event?.event ?? null) as Record<string, unknown> | null,
     proposals: proofRes.proposals ?? [],
     disputes: proofRes.disputes ?? [],
+    recentTrades: detailRes.recent_trades ?? [],
+    probabilityHistory: detailRes.probability_history ?? [],
     specVerified: detailRes.spec_verification?.verified ?? false,
     computedSha256: detailRes.spec_verification?.computed_sha256 ?? "",
   };
 }
 
 export async function getCurrentBackendUser(): Promise<BackendUserProfile | null> {
-  if (!getStoredToken()) return null;
+  if (!getStoredToken()) {
+    cachedUser = null;
+    return null;
+  }
   try {
     const res = await apiRequest<{ user: BackendUserProfile }>("/api/v1/me");
+    cachedUser = res.user;
     return res.user;
   } catch {
     setStoredToken(null);
+    cachedUser = null;
     return null;
   }
 }
@@ -507,12 +585,14 @@ export async function loginWithNostrToBackend(): Promise<{
     },
   );
   setStoredToken(res.token);
+  cachedUser = res.user;
   return res;
 }
 
 export async function logoutFromBackend(): Promise<void> {
   await apiRequest("/api/v1/auth/logout", { method: "POST" }).catch(() => null);
   setStoredToken(null);
+  cachedUser = null;
 }
 
 export async function ensureBackendSession(): Promise<BackendUserProfile> {
@@ -522,14 +602,50 @@ export async function ensureBackendSession(): Promise<BackendUserProfile> {
   return logged.user;
 }
 
+export async function uploadMarketImage(file: File): Promise<{
+  url: string;
+  filename: string;
+  mime: string;
+  size: number;
+}> {
+  await ensureBackendSession();
+  const form = new FormData();
+  form.append("file", file);
+  return apiRequest<{
+    url: string;
+    filename: string;
+    mime: string;
+    size: number;
+  }>("/api/v1/uploads/market-image", {
+    method: "POST",
+    body: form,
+  });
+}
+
 export async function createBackendMarketDraft(
   prompt: string,
   timezone?: string,
+  imageUrl?: string,
 ): Promise<DraftResponse> {
   await ensureBackendSession();
   return apiRequest<DraftResponse>("/api/v1/markets/draft", {
     method: "POST",
-    body: JSON.stringify({ prompt, timezone }),
+    body: JSON.stringify({
+      prompt,
+      timezone,
+      ...(imageUrl?.trim() ? { image_url: imageUrl.trim() } : {}),
+    }),
+  });
+}
+
+export async function updateBackendMarketDraftSpec(
+  draftId: string,
+  spec: Record<string, unknown>,
+): Promise<DraftResponse> {
+  await ensureBackendSession();
+  return apiRequest<DraftResponse>(`/api/v1/markets/draft/${encodeURIComponent(draftId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ spec }),
   });
 }
 

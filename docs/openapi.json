@@ -24,6 +24,10 @@
     {
       "name": "Settlement & Ops",
       "description": "LNbits webhooks, payouts, LNURL-withdraw, and demo seeding"
+    },
+    {
+      "name": "Media",
+      "description": "Market cover image uploads & static serving"
     }
   ],
   "components": {
@@ -363,6 +367,10 @@
                   "timezone": {
                     "maxLength": 80,
                     "type": "string"
+                  },
+                  "image_url": {
+                    "maxLength": 500,
+                    "type": "string"
                   }
                 }
               }
@@ -381,6 +389,10 @@
                   "timezone": {
                     "maxLength": 80,
                     "type": "string"
+                  },
+                  "image_url": {
+                    "maxLength": 500,
+                    "type": "string"
                   }
                 }
               }
@@ -398,6 +410,10 @@
                   },
                   "timezone": {
                     "maxLength": 80,
+                    "type": "string"
+                  },
+                  "image_url": {
+                    "maxLength": 500,
                     "type": "string"
                   }
                 }
@@ -470,7 +486,7 @@
         "tags": [
           "Markets & Betting"
         ],
-        "summary": "Get market details, Nostr events & SHA-256 verification",
+        "summary": "Get market details, trade history, probability timeline & SHA-256 verification",
         "parameters": [
           {
             "name": "id",
@@ -1109,6 +1125,84 @@
         ],
         "summary": "Idempotent showcase demo seeder (3 users, 6 markets)",
         "operationId": "postApiV1DemoSeed"
+      }
+    },
+    "/api/v1/uploads/market-image": {
+      "post": {
+        "summary": "Upload a market cover image (PNG, JPEG, WEBP, GIF up to 5 MB)",
+        "tags": [
+          "Media"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "default": "File",
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "default": "File",
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "default": "File",
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1UploadsMarket-image"
+      }
+    },
+    "/api/v1/uploads/{filename}": {
+      "get": {
+        "summary": "Serve an uploaded market cover image",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiV1UploadsByFilename"
       }
     }
   }

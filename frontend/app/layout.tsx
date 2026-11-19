@@ -23,6 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${ibmPlexSans.variable} h-full antialiased`}
     >
       <body className="bg-white text-[#101114] antialiased min-h-screen flex flex-col selection:bg-[rgba(133,91,251,0.16)] selection:text-[#7132f5]">
