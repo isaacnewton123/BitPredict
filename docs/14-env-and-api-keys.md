@@ -13,12 +13,12 @@ BitPredict separates configuration into two environment files:
 
 Copy `frontend/.env.example` to `frontend/.env` (already created with working local defaults):
 
-| Variable | Local Value | Purpose & Where to Get It |
-| --- | --- | --- |
-| `BACKEND_URL` | `http://localhost:3001` | Server-side Next.js rewrite destination for `/api/v1/*` in `frontend/next.config.ts`. Point to your Elysia backend URL (local or deployed domain). |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Browser base URL for backend API requests. Set to `http://localhost:3001` for direct CORS requests to `app/`, or `same-origin` to route through Next.js `/api/v1/*` rewrites. |
-| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | Public URL where your Next.js app is hosted (local dev is `http://localhost:3000`). |
-| `NEXT_PUBLIC_NOSTR_RELAYS` | `wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band` | Comma-separated public WebSocket relays used by browser NIP-07 clients and event pointers. Public relays listed require no API keys. |
+| Variable                   | Local Value                                                 | Purpose & Where to Get It                                                                                                                                                     |
+| -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BACKEND_URL`              | `http://localhost:3001`                                     | Server-side Next.js rewrite destination for `/api/v1/*` in `frontend/next.config.ts`. Point to your Elysia backend URL (local or deployed domain).                            |
+| `NEXT_PUBLIC_API_URL`      | `http://localhost:3001`                                     | Browser base URL for backend API requests. Set to `http://localhost:3001` for direct CORS requests to `app/`, or `same-origin` to route through Next.js `/api/v1/*` rewrites. |
+| `NEXT_PUBLIC_APP_URL`      | `http://localhost:3000`                                     | Public URL where your Next.js app is hosted (local dev is `http://localhost:3000`).                                                                                           |
+| `NEXT_PUBLIC_NOSTR_RELAYS` | `wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band` | Comma-separated public WebSocket relays used by browser NIP-07 clients and event pointers. Public relays listed require no API keys.                                          |
 
 ---
 
@@ -28,17 +28,17 @@ Copy `app/.env.example` to `app/.env` (already created with working local `DEMO_
 
 ### Server & Database
 
-| Variable | Local Value | Where to Get It |
-| --- | --- | --- |
-| `PORT` | `3001` | TCP port for the Elysia server (`app/src/index.ts`). |
-| `DATABASE_URL` | `file:./data/bitpredict.db` | Local SQLite works out of the box (no signup needed). For production hosted libSQL on **Turso**: run `turso db create bitpredict` then `turso db show bitpredict --url` (format `libsql://...`). |
-| `DATABASE_AUTH_TOKEN` | *(empty locally)* | Leave blank for local SQLite. For **Turso**: run `turso db tokens create bitpredict` (or generate in **Turso Dashboard → Databases → Create Token**). |
-| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | Must match your frontend URL (used in Nostr announcement links and LNURL callbacks). |
+| Variable              | Local Value                 | Where to Get It                                                                                                                                                                                  |
+| --------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PORT`                | `3001`                      | TCP port for the Elysia server (`app/src/index.ts`).                                                                                                                                             |
+| `DATABASE_URL`        | `file:./data/bitpredict.db` | Local SQLite works out of the box (no signup needed). For production hosted libSQL on **Turso**: run `turso db create bitpredict` then `turso db show bitpredict --url` (format `libsql://...`). |
+| `DATABASE_AUTH_TOKEN` | _(empty locally)_           | Leave blank for local SQLite. For **Turso**: run `turso db tokens create bitpredict` (or generate in **Turso Dashboard → Databases → Create Token**).                                            |
+| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000`     | Must match your frontend URL (used in Nostr announcement links and LNURL callbacks).                                                                                                             |
 
 ### Authentication Secret
 
-| Variable | Example | How to Generate |
-| --- | --- | --- |
+| Variable      | Example            | How to Generate                                                                                                                                                                                                               |
+| ------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AUTH_SECRET` | 64-char hex string | Required in production (`NODE_ENV=production`) for HMAC signing auth challenges & session cookies. Generate locally with: `openssl rand -hex 32` or `bun -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 
 ### NVIDIA NIM AI (`NVIDIA_API_KEY`) — Free Hosted Option
@@ -66,7 +66,7 @@ Used when `AI_PROVIDER=gemini`, or when `AI_PROVIDER=auto` and `NVIDIA_API_KEY` 
 
 When `LNBITS_URL` and `LNBITS_INVOICE_KEY` are empty with `DEMO_MODE=true`, BitPredict uses built-in simulated BOLT11 invoices & payouts. To process real satoshis over Lightning:
 
-1. Create a wallet on **LNbits** (<https://legend.lnbits.com> for testing/demo or your own self-hosted LND/Core Lightning LNbits server).
+1. Create a wallet on **LNbits** (<https://demo.lnbits.com> for testing/demo or your own self-hosted LND/Core Lightning LNbits server).
 2. Open your wallet in the LNbits web UI and click **API info** on the right panel.
 3. Copy the values into `app/.env`:
    - `LNBITS_URL` — Base URL of your LNbits server (no trailing slash, e.g. `https://legend.lnbits.com`).
@@ -85,27 +85,27 @@ cd app
 bun -e "import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'; const sk = generateSecretKey(); const hex = Buffer.from(sk).toString('hex'); console.log({ secret_hex: hex, pubkey_hex: getPublicKey(sk) });"
 ```
 
-| Variable | Description |
-| --- | --- |
-| `PLATFORM_NOSTR_SECRET_KEY` | 64-char hex or `nsec1...` key used by the backend to sign `kind 30078` Market Specs, `kind 1` Announcements, and Settlement Notes. |
-| `PLATFORM_ORACLE_SECRET_KEY` | Separate 64-char hex or `nsec1...` key used exclusively to sign `kind 30079` Track A outcome attestations. |
-| `ORACLE_SIGNER_PUBKEYS` | Comma-separated 64-char hex Nostr pubkeys (or `npub1...`) allowed to submit Track B proposals (`kind 30079`). Empty in `DEMO_MODE=true` allows demo signers. |
-| `ADMIN_PUBKEYS` | Comma-separated 64-char hex Nostr pubkeys (or `npub1...`) authorized to call `POST /api/v1/admin/disputes/:id/rule`. |
-| `NOSTR_RELAYS` | Comma-separated relay URLs (`wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band`). |
-| `NOSTR_PUBLISH_DISABLED` | Set `true` for fast offline development/testing, or `false` to broadcast real signed events to `NOSTR_RELAYS`. |
+| Variable                     | Description                                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PLATFORM_NOSTR_SECRET_KEY`  | 64-char hex or `nsec1...` key used by the backend to sign `kind 30078` Market Specs, `kind 1` Announcements, and Settlement Notes.                           |
+| `PLATFORM_ORACLE_SECRET_KEY` | Separate 64-char hex or `nsec1...` key used exclusively to sign `kind 30079` Track A outcome attestations.                                                   |
+| `ORACLE_SIGNER_PUBKEYS`      | Comma-separated 64-char hex Nostr pubkeys (or `npub1...`) allowed to submit Track B proposals (`kind 30079`). Empty in `DEMO_MODE=true` allows demo signers. |
+| `ADMIN_PUBKEYS`              | Comma-separated 64-char hex Nostr pubkeys (or `npub1...`) authorized to call `POST /api/v1/admin/disputes/:id/rule`.                                         |
+| `NOSTR_RELAYS`               | Comma-separated relay URLs (`wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band`).                                                                    |
+| `NOSTR_PUBLISH_DISABLED`     | Set `true` for fast offline development/testing, or `false` to broadcast real signed events to `NOSTR_RELAYS`.                                               |
 
 ### Betting, Settlement & Track B Parameters
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `MIN_BET_SATS` | `10` | Minimum allowed wager per bet in satoshis. |
-| `MAX_BET_SATS` | `100000` | Maximum allowed single wager in satoshis. |
-| `INVOICE_EXPIRY_SEC` | `600` | BOLT11 invoice expiry time in seconds (bounded by time remaining until `betting_cutoff_utc`). |
-| `PLATFORM_FEE_BPS` | `200` | Fee charged on the losing pool in basis points (`200` = `2%`). |
-| `PAYOUT_MAX_RETRIES` | `3` | Outgoing LNURL-pay delivery attempts before falling back to `CLAIMABLE` manual/LNURL-withdraw claim. |
-| `CHALLENGE_WINDOW_SEC` | `3600` | Track B optimistic challenge duration in seconds (`3600` = 1h; fast `120s` when `DEMO_MODE=true`). |
-| `DISPUTE_BOND_SATS` | `1000` | Lightning bond invoice amount required to submit a `kind 30080` dispute. |
-| `DEMO_MODE` | `true` | Enables `/api/v1/demo/seed`, simulated LNbits invoices/payouts when keys are blank, and fast oracle demo resolution triggers. Set `false` in production! |
+| Variable               | Default  | Meaning                                                                                                                                                  |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MIN_BET_SATS`         | `10`     | Minimum allowed wager per bet in satoshis.                                                                                                               |
+| `MAX_BET_SATS`         | `100000` | Maximum allowed single wager in satoshis.                                                                                                                |
+| `INVOICE_EXPIRY_SEC`   | `600`    | BOLT11 invoice expiry time in seconds (bounded by time remaining until `betting_cutoff_utc`).                                                            |
+| `PLATFORM_FEE_BPS`     | `200`    | Fee charged on the losing pool in basis points (`200` = `2%`).                                                                                           |
+| `PAYOUT_MAX_RETRIES`   | `3`      | Outgoing LNURL-pay delivery attempts before falling back to `CLAIMABLE` manual/LNURL-withdraw claim.                                                     |
+| `CHALLENGE_WINDOW_SEC` | `3600`   | Track B optimistic challenge duration in seconds (`3600` = 1h; fast `120s` when `DEMO_MODE=true`).                                                       |
+| `DISPUTE_BOND_SATS`    | `1000`   | Lightning bond invoice amount required to submit a `kind 30080` dispute.                                                                                 |
+| `DEMO_MODE`            | `true`   | Enables `/api/v1/demo/seed`, simulated LNbits invoices/payouts when keys are blank, and fast oracle demo resolution triggers. Set `false` in production! |
 
 ### Cloudflare R2 Image Storage (`R2_*`)
 
@@ -118,16 +118,16 @@ Market cover image uploads (`POST /api/v1/uploads/market-image`) support **Cloud
    - If `R2_PUBLIC_URL` is left blank, BitPredict keeps the bucket private and serves uploaded images through `GET /api/v1/uploads/:filename` using signed R2 requests.
 5. Set `STORAGE_DRIVER=r2` if you want to enforce R2 and reject uploads when credentials are missing.
 
-| Variable | Description |
-| --- | --- |
-| `STORAGE_DRIVER` | `auto` (use R2 when configured, else local disk) or `r2` (strictly require Cloudflare R2). |
-| `R2_ACCOUNT_ID` | Cloudflare 32-char Account ID used to build `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. |
-| `R2_ACCESS_KEY_ID` | R2 S3 API Token Access Key ID. |
-| `R2_SECRET_ACCESS_KEY` | R2 S3 API Token Secret Access Key (backend-only secret). |
-| `R2_BUCKET_NAME` | Target Cloudflare R2 bucket name. |
-| `R2_PUBLIC_URL` | Optional public `r2.dev` or custom CDN `https://` base URL returned directly after upload. |
-| `R2_KEY_PREFIX` | Optional object key prefix inside the bucket (defaults to `markets`). |
-| `R2_ENDPOINT` | Optional custom S3 endpoint override (e.g. EU/FedRAMP jurisdiction endpoint). |
+| Variable               | Description                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| `STORAGE_DRIVER`       | `auto` (use R2 when configured, else local disk) or `r2` (strictly require Cloudflare R2).      |
+| `R2_ACCOUNT_ID`        | Cloudflare 32-char Account ID used to build `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. |
+| `R2_ACCESS_KEY_ID`     | R2 S3 API Token Access Key ID.                                                                  |
+| `R2_SECRET_ACCESS_KEY` | R2 S3 API Token Secret Access Key (backend-only secret).                                        |
+| `R2_BUCKET_NAME`       | Target Cloudflare R2 bucket name.                                                               |
+| `R2_PUBLIC_URL`        | Optional public `r2.dev` or custom CDN `https://` base URL returned directly after upload.      |
+| `R2_KEY_PREFIX`        | Optional object key prefix inside the bucket (defaults to `markets`).                           |
+| `R2_ENDPOINT`          | Optional custom S3 endpoint override (e.g. EU/FedRAMP jurisdiction endpoint).                   |
 
 ---
 
