@@ -51,11 +51,13 @@ export const markets = sqliteTable(
     outcome: text("outcome", { enum: OUTCOMES }),
     resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
     nostrNoteId: text("nostr_note_id"),
+    isDemo: integer("is_demo", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [
     index("markets_status_resolve_idx").on(t.status, t.resolveAfter),
     index("markets_category_status_idx").on(t.category, t.status),
+    index("markets_demo_status_idx").on(t.isDemo, t.status),
     check("markets_time_order", sql`${t.bettingCutoff} <= ${t.deadlineUtc} AND ${t.deadlineUtc} <= ${t.resolveAfter}`),
   ],
 );

@@ -203,7 +203,9 @@ export async function settleMarketAndDispatchPayouts(
       continue;
     }
 
-    const invRes = await reqInvFn(user.lightningAddress, payout.amountMsat);
+    const invRes = await reqInvFn(user.lightningAddress, payout.amountMsat, {
+      forceSimulated: initialMarket.isDemo,
+    });
     if (!invRes.ok) {
       const nextAttempts = payout.attempts + 1;
       await db
@@ -218,7 +220,9 @@ export async function settleMarketAndDispatchPayouts(
       continue;
     }
 
-    const payRes = await payInvFn(invRes.bolt11);
+    const payRes = await payInvFn(invRes.bolt11, {
+      forceSimulated: initialMarket.isDemo,
+    });
     if (!payRes.ok) {
       const nextAttempts = payout.attempts + 1;
       await db
@@ -327,7 +331,10 @@ export async function settleMarketAndDispatchPayouts(
 
       const relays = getConfiguredRelays();
       const broadcast =
-        opts.broadcastFn ?? ((ev: VerifiedEvent, r: string[]) => broadcastEventToRelays(ev, r));
+        opts.broadcastFn ??
+        (finalMarket.isDemo
+          ? async () => [] as string[]
+          : (ev: VerifiedEvent, r: string[]) => broadcastEventToRelays(ev, r));
       const relaysOk = await broadcast(settlementEvent, relays);
       settlementNoteId = settlementEvent.id;
 
@@ -393,9 +400,16 @@ export async function claimPayoutWithBolt11(
     return { ok: false, status: 409, code: "ALREADY_CLAIMED", message: `Payout is already ${payout.status}` };
   }
 
+  const mktRows = await db
+    .select({ isDemo: schema.markets.isDemo })
+    .from(schema.markets)
+    .where(eq(schema.markets.id, payout.marketId))
+    .limit(1);
+  const isDemoMarket = Boolean(mktRows[0]?.isDemo);
+
   let invoice = opts.bolt11?.trim() ?? "";
   if (!invoice) {
-    if (process.env.DEMO_MODE === "false") {
+    if (!isDemoMarket && process.env.DEMO_MODE === "false") {
       return { ok: false, status: 422, code: "VALIDATION_FAILED", message: "Provide a bolt11 Lightning invoice" };
     }
     const h = createHash("sha256").update(`claim:${payout.id}:${Date.now()}`).digest("hex");
@@ -405,7 +419,7 @@ export async function claimPayoutWithBolt11(
   }
 
   const payFn = opts.payInvoiceFn ?? payLightningInvoice;
-  const payRes = await payFn(invoice);
+  const payRes = await payFn(invoice, { forceSimulated: isDemoMarket });
   if (!payRes.ok) {
     return { ok: false, status: 502, code: "LIGHTNING_ERROR", message: payRes.error };
   }
@@ -482,6 +496,7 @@ export async function listUserPayoutsFromDb(
         title: schema.markets.title,
         status: schema.markets.status,
         outcome: schema.markets.outcome,
+        isDemo: schema.markets.isDemo,
       },
     })
     .from(schema.payouts)

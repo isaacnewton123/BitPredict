@@ -140,11 +140,12 @@ export function verifySessionToken(token: string, nowMs = Date.now()): SessionPa
 }
 
 export function sessionCookieOptions(maxAgeSec = Math.floor(SESSION_TTL_MS / 1000)) {
+  const isProd = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    sameSite: "lax" as const,
+    sameSite: isProd ? ("none" as const) : ("lax" as const),
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure: isProd,
     maxAge: maxAgeSec,
   };
 }

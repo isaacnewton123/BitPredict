@@ -15,6 +15,7 @@ import { ConfirmActionModal } from "@/components/shared/ConfirmActionModal";
 import { MarketCover } from "@/components/shared/MarketCover";
 import { OracleSpecSummary } from "@/components/shared/OracleSpecSummary";
 import {
+  type BackendUserProfile,
   createBackendMarketDraft,
   type DraftResponse,
   formatUtcDisplay,
@@ -45,11 +46,18 @@ const QUICK_EXAMPLES: readonly { label: string; prompt: string }[] = [
 ];
 
 interface CreatorViewProps {
+  user: BackendUserProfile | null;
+  onOpenConnectModal: () => void;
   onPublished: (market: MarketItem) => void;
   onNotify: (title: string, subtitle: string) => void;
 }
 
-export function CreatorView({ onPublished, onNotify }: CreatorViewProps) {
+export function CreatorView({
+  user,
+  onOpenConnectModal,
+  onPublished,
+  onNotify,
+}: CreatorViewProps) {
   const [prompt, setPrompt] = useState("");
   const [compiling, setCompiling] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -71,6 +79,14 @@ export function CreatorView({ onPublished, onNotify }: CreatorViewProps) {
   }
 
   async function generateFrom(text: string) {
+    if (!user) {
+      onOpenConnectModal();
+      onNotify(
+        "Connect an Account First",
+        "Choose Live Nostr or Use Demo Account before generating a market.",
+      );
+      return;
+    }
     const trimmed = text.trim();
     if (!trimmed) {
       onNotify("Enter a Prediction Prompt", "Type a 1-sentence question or click a quick example.");
@@ -128,9 +144,22 @@ export function CreatorView({ onPublished, onNotify }: CreatorViewProps) {
   return (
     <section className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
       <div className="mb-8">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[rgba(133,91,251,0.16)] text-[#7132f5] text-[12px] font-semibold mb-3">
-          <LuSparkles className="w-3.5 h-3.5" strokeWidth={2} />
-          <span>AI Prompt-to-Oracle Studio</span>
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[rgba(133,91,251,0.16)] text-[#7132f5] text-[12px] font-semibold">
+            <LuSparkles className="w-3.5 h-3.5" strokeWidth={2} />
+            <span>AI Prompt-to-Oracle Studio</span>
+          </div>
+          {user && (
+            <span
+              className={`px-2.5 py-1 rounded-[6px] text-[12px] font-semibold ${
+                user.is_guest
+                  ? "bg-[rgba(133,91,251,0.12)] text-[#5741d8]"
+                  : "bg-[rgba(20,158,97,0.14)] text-[#026b3f]"
+              }`}
+            >
+              {user.is_guest ? "Publishing to Demo Sandbox" : "Publishing as Live Market"}
+            </span>
+          )}
         </div>
         <h1 className="text-[32px] sm:text-[36px] font-bold leading-[1.22] tracking-[-0.5px] text-[#101114] mb-2">
           Create a Prediction Market in One Sentence
@@ -140,6 +169,26 @@ export function CreatorView({ onPublished, onNotify }: CreatorViewProps) {
           and a deterministic data-feed rulebook or community oracle specification.
         </p>
       </div>
+
+      {!user && (
+        <div className="mb-5 p-4 rounded-[14px] border border-[rgba(113,50,245,0.28)] bg-[rgba(133,91,251,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-[14px] font-bold text-[#101114]">
+              Connect Live Nostr or Demo Account
+            </p>
+            <p className="text-[12px] text-[#686b82] mt-0.5">
+              Demo accounts publish safely to the isolated Demo Sandbox without real sats; Live Nostr accounts publish live markets.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenConnectModal}
+            className="shrink-0 px-4 py-2 text-[13px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] rounded-[12px] transition-colors cursor-pointer"
+          >
+            Connect Account
+          </button>
+        </div>
+      )}
 
       <div className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper p-5 sm:p-6">
         <label

@@ -25,6 +25,7 @@ import {
   type MarketItem,
   type MarketSide,
   type MarketTradePoint,
+  type PlaceBetOutcome,
   resolveMarketImageUrl,
   type UserPositionItem,
 } from "@/lib/bitpredict-data";
@@ -42,7 +43,16 @@ interface MarketTradingViewProps {
     market: MarketItem;
     side: MarketSide;
     amountSats: number;
-  }) => Promise<{ payment_hash: string; simulated: boolean } | null>;
+  }) => Promise<PlaceBetOutcome | null>;
+  onInvoiceSettled: (opts: {
+    market: MarketItem;
+    side: MarketSide;
+    amountSats: number;
+    paymentHash: string;
+  }) => Promise<void>;
+  onOpenConnectModal: () => void;
+  onSwitchAccountMode: (mode: "live" | "demo") => Promise<void>;
+  onNotify: (title: string, subtitle: string) => void;
 }
 
 export function MarketTradingView({
@@ -51,6 +61,10 @@ export function MarketTradingView({
   user,
   userPositions,
   onPlaceBet,
+  onInvoiceSettled,
+  onOpenConnectModal,
+  onSwitchAccountMode,
+  onNotify,
 }: MarketTradingViewProps) {
   const [loadedState, setLoadedState] = useState<{
     key: string;
@@ -242,10 +256,27 @@ export function MarketTradingView({
       side: activeSide,
       amountSats,
     });
-    if (result) {
+    if (result?.status === "settled") {
       await refreshBundle();
     }
     return result;
+  }
+
+  async function handleLiveInvoiceSettled(opts: {
+    side: MarketSide;
+    amountSats: number;
+    paymentHash: string;
+  }) {
+    if (!liveMarket) return;
+    await Promise.all([
+      onInvoiceSettled({
+        market: liveMarket,
+        side: opts.side,
+        amountSats: opts.amountSats,
+        paymentHash: opts.paymentHash,
+      }),
+      refreshBundle(),
+    ]);
   }
 
   if (loading) {
@@ -409,6 +440,19 @@ export function MarketTradingView({
                     outcome={liveMarket.outcome}
                     size="sm"
                   />
+                  {liveMarket.isDemo && (
+                    <span className="px-2.5 py-0.5 text-[11px] font-bold bg-[rgba(133,91,251,0.14)] text-[#7132f5] rounded-[6px]">
+                      Demo Sandbox
+                    </span>
+                  )}
+                  {user?.is_guest && liveMarket.isDemo && liveMarket.status !== "SETTLED" && (
+                    <Link
+                      href="/admin"
+                      className="text-[11px] font-semibold text-[#5741d8] hover:underline"
+                    >
+                      Test resolution in Admin Console →
+                    </Link>
+                  )}
                 </div>
 
                 <h1 className="text-[22px] sm:text-[26px] font-bold text-[#101114] leading-[1.25] tracking-[-0.4px]">
@@ -474,6 +518,10 @@ export function MarketTradingView({
           myMarketPositions={myMarketPositions}
           onSelectSide={setOrderSide}
           onSubmitBet={handleSubmitTicket}
+          onLiveInvoiceSettled={handleLiveInvoiceSettled}
+          onOpenConnectModal={onOpenConnectModal}
+          onSwitchAccountMode={onSwitchAccountMode}
+          onNotify={onNotify}
         />
       </div>
     </section>

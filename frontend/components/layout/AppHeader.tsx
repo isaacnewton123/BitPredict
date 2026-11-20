@@ -11,14 +11,16 @@ interface AppHeaderProps {
   activeView: AppView;
   user: BackendUserProfile | null;
   connectingWallet: boolean;
-  onConnectOrDisconnect: () => void;
+  onOpenConnectModal: () => void;
+  onSwitchToLive: () => void;
 }
 
 export function AppHeader({
   activeView,
   user,
   connectingWallet,
-  onConnectOrDisconnect,
+  onOpenConnectModal,
+  onSwitchToLive,
 }: AppHeaderProps) {
   const wallet = useConnectedWallet();
 
@@ -69,7 +71,7 @@ export function AppHeader({
             <span>Create Market</span>
           </Link>
 
-          {wallet && (
+          {wallet && !user?.is_guest && (
             <Link
               href="/profile"
               title={`Lightning wallet connected: ${wallet.label}`}
@@ -83,29 +85,56 @@ export function AppHeader({
           <button
             type="button"
             disabled={connectingWallet}
-            onClick={onConnectOrDisconnect}
+            onClick={onOpenConnectModal}
             className={
               user
-                ? "inline-flex items-center gap-2 px-3.5 py-[10px] text-[13px] font-semibold text-[#026b3f] bg-[rgba(20,158,97,0.16)] border border-transparent hover:bg-[rgba(20,158,97,0.24)] rounded-[12px] transition-colors cursor-pointer"
+                ? user.is_guest
+                  ? "inline-flex items-center gap-2 px-3.5 py-[10px] text-[13px] font-semibold text-[#5741d8] bg-[rgba(133,91,251,0.14)] border border-[rgba(113,50,245,0.28)] hover:bg-[rgba(133,91,251,0.22)] rounded-[12px] transition-colors cursor-pointer"
+                  : "inline-flex items-center gap-2 px-3.5 py-[10px] text-[13px] font-semibold text-[#026b3f] bg-[rgba(20,158,97,0.16)] border border-transparent hover:bg-[rgba(20,158,97,0.24)] rounded-[12px] transition-colors cursor-pointer"
                 : "inline-flex items-center gap-2 px-3.5 py-[10px] text-[14px] font-semibold text-[#5741d8] bg-white border border-[#5741d8] hover:bg-[rgba(133,91,251,0.08)] rounded-[12px] transition-colors cursor-pointer"
             }
           >
             <LuKeyRound className="w-4 h-4" strokeWidth={2} />
             {user ? (
-              <span className="font-mono">
-                {user.npub.slice(0, 8)}...{user.npub.slice(-4)}
-              </span>
+              <>
+                {user.is_guest && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-bold tracking-[0.04em] bg-[#7132f5] text-white rounded-[5px]">
+                    DEMO
+                  </span>
+                )}
+                <span className="font-mono">
+                  {user.npub.slice(0, 8)}...{user.npub.slice(-4)}
+                </span>
+              </>
             ) : connectingWallet ? (
-              <span>Signing...</span>
+              <span>Connecting...</span>
             ) : (
               <>
-                <span className="hidden sm:inline">Sign In with Nostr</span>
-                <span className="sm:hidden">Sign In</span>
+                <span className="hidden sm:inline">Connect Account</span>
+                <span className="sm:hidden">Connect</span>
               </>
             )}
           </button>
         </div>
       </div>
+
+      {/* Demo Sandbox Banner */}
+      {user?.is_guest && (
+        <div className="bg-[rgba(133,91,251,0.10)] border-t border-[rgba(113,50,245,0.18)]">
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[12px]">
+            <p className="text-[#5741d8] font-medium">
+              <strong className="font-bold">Demo Sandbox Mode:</strong> Trading play-money Demo markets with simulated Lightning invoices.
+            </p>
+            <button
+              type="button"
+              onClick={onSwitchToLive}
+              className="text-[12px] font-bold text-[#7132f5] hover:text-[#5b1ecf] hover:underline cursor-pointer"
+            >
+              Switch to Live Account →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Navigation Row */}
       <div

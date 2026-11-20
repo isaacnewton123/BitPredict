@@ -169,8 +169,14 @@ export function LightningWalletCard({
           </div>
 
           {user && (
-            <span className="px-2.5 py-1 text-[11px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]">
-              {user.is_guest ? "Guest Nostr Identity" : "NIP-07 Nostr Identity"}
+            <span
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-[8px] ${
+                user.is_guest
+                  ? "bg-[rgba(133,91,251,0.14)] text-[#5741d8]"
+                  : "bg-[rgba(20,158,97,0.14)] text-[#026b3f]"
+              }`}
+            >
+              {user.is_guest ? "Demo Sandbox Account" : "Live Nostr Account"}
             </span>
           )}
         </div>

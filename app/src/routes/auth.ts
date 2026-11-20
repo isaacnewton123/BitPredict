@@ -17,13 +17,20 @@ import { listUserPositionsFromDb } from "@/lib/payments/bet-repo";
 import { listUserPayoutsFromDb } from "@/lib/payments/settlement-repo";
 import { isAuthorizedAdmin } from "@/lib/oracle/track-b-repo";
 
-function withAdminFlag<T extends { pubkey: string }>(user: T): T & { is_admin: boolean };
-function withAdminFlag<T extends { pubkey: string }>(user: T | null): (T & { is_admin: boolean }) | null;
-function withAdminFlag<T extends { pubkey: string }>(user: T | null): (T & { is_admin: boolean }) | null {
+function withAdminFlag<T extends { pubkey: string; is_guest: boolean }>(
+  user: T,
+): T & { is_admin: boolean; account_mode: "live" | "demo" };
+function withAdminFlag<T extends { pubkey: string; is_guest: boolean }>(
+  user: T | null,
+): (T & { is_admin: boolean; account_mode: "live" | "demo" }) | null;
+function withAdminFlag<T extends { pubkey: string; is_guest: boolean }>(
+  user: T | null,
+): (T & { is_admin: boolean; account_mode: "live" | "demo" }) | null {
   if (!user) return null;
   return {
     ...user,
-    is_admin: isAuthorizedAdmin(user.pubkey),
+    is_admin: !user.is_guest && isAuthorizedAdmin(user.pubkey),
+    account_mode: user.is_guest ? "demo" : "live",
   };
 }
 
@@ -144,7 +151,9 @@ export const authRoutes = new Elysia({ name: "bitpredict-auth", tags: ["Auth & P
         return { user: withAdminFlag(updated), verified_remote: false, warning: null };
       }
 
-      const validation = await validateLightningAddress(rawAddress);
+      const validation = await validateLightningAddress(rawAddress, {
+        allowDemoFallback: current.is_guest,
+      });
       if (!validation.ok) {
         set.status = 422;
         return { error: { code: "VALIDATION_FAILED", message: validation.error } };

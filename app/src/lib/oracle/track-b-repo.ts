@@ -11,7 +11,10 @@ import { emitMarketPoolUpdate } from "@/lib/payments/events";
 import { createLightningInvoice } from "@/lib/payments/lnbits";
 import { settleMarketAndDispatchPayouts } from "@/lib/payments/settlement-repo";
 
-export function getChallengeWindowSec(): number {
+export function getChallengeWindowSec(isDemoMarket = false): number {
+  if (isDemoMarket) {
+    return 120;
+  }
   const raw = process.env.CHALLENGE_WINDOW_SEC?.trim();
   if (!raw && process.env.DEMO_MODE !== "false") {
     return 120;
@@ -186,7 +189,7 @@ export async function submitTrackBProposal(
   const canAutoTransition =
     (market.status === "OPEN" || market.status === "CLOSED") &&
     (now.getTime() >= market.resolveAfter.getTime() ||
-      (Boolean(opts.forceReadyInDemo) && process.env.DEMO_MODE !== "false"));
+      (Boolean(opts.forceReadyInDemo) && (market.isDemo || process.env.DEMO_MODE !== "false")));
 
   if (market.status !== "PENDING_RESOLUTION" && !canAutoTransition) {
     return {
@@ -236,7 +239,7 @@ export async function submitTrackBProposal(
     return { ok: false, status: 422, code: "VALIDATION_FAILED", message: "Proposal must include at least one valid http(s) proof URL tag" };
   }
 
-  const authorized = await isAuthorizedSigner(db, ev.pubkey, opts.allowedSigners);
+  const authorized = market.isDemo || (await isAuthorizedSigner(db, ev.pubkey, opts.allowedSigners));
   if (!authorized) {
     return { ok: false, status: 403, code: "SIGNER_NOT_AUTHORIZED", message: "Pubkey is not an authorized oracle signer" };
   }
@@ -251,10 +254,14 @@ export async function submitTrackBProposal(
     };
   }
 
-  const windowSec = opts.challengeWindowSec ?? getChallengeWindowSec();
+  const windowSec = opts.challengeWindowSec ?? getChallengeWindowSec(market.isDemo);
   const challengeEndsAt = new Date(now.getTime() + windowSec * 1000);
   const relays = getConfiguredRelays();
-  const broadcast = opts.broadcastFn ?? ((e: VerifiedEvent, r: string[]) => broadcastEventToRelays(e, r));
+  const broadcast =
+    opts.broadcastFn ??
+    (market.isDemo
+      ? async () => [] as string[]
+      : (e: VerifiedEvent, r: string[]) => broadcastEventToRelays(e, r));
   const relaysOk = await broadcast(ev as VerifiedEvent, relays);
 
   const txOut = await db.transaction(async (tx) => {
@@ -410,6 +417,7 @@ export async function submitTrackBDispute(
       amountSats: bondSats,
       memo: `BitPredict Dispute Bond: ${market.slug}`,
       expirySec: 600,
+      forceSimulated: market.isDemo,
     });
   } catch (err) {
     return {
@@ -421,7 +429,11 @@ export async function submitTrackBDispute(
   }
 
   const relays = getConfiguredRelays();
-  const broadcast = opts.broadcastFn ?? ((e: VerifiedEvent, r: string[]) => broadcastEventToRelays(e, r));
+  const broadcast =
+    opts.broadcastFn ??
+    (market.isDemo
+      ? async () => [] as string[]
+      : (e: VerifiedEvent, r: string[]) => broadcastEventToRelays(e, r));
   const relaysOk = await broadcast(ev as VerifiedEvent, relays);
 
   const txOut = await db.transaction(async (tx) => {
@@ -523,7 +535,10 @@ export async function finalizeExpiredProposals(
     if (!proposal) continue;
 
     const expired = now.getTime() >= proposal.challengeEndsAt.getTime();
-    const force = Boolean(opts.forceFinalizeInDemo) && process.env.DEMO_MODE !== "false" && opts.marketId === m.id;
+    const force =
+      Boolean(opts.forceFinalizeInDemo) &&
+      (m.isDemo || process.env.DEMO_MODE !== "false") &&
+      opts.marketId === m.id;
     if (!expired && !force) continue;
 
     const nextStatus = proposal.outcome === "INVALID" ? "VOID" : "RESOLVED";
@@ -594,10 +609,12 @@ export async function ruleOnDispute(
     outcome: Outcome;
     now?: Date;
     allowedAdmins?: string[];
+    allowDemoAdmin?: boolean;
     broadcastFn?: (event: VerifiedEvent, relays: string[]) => Promise<string[]>;
   },
 ): Promise<RuleDisputeResult> {
-  if (!isAuthorizedAdmin(opts.adminPubkey, opts.allowedAdmins)) {
+  const isStrictAdmin = isAuthorizedAdmin(opts.adminPubkey, opts.allowedAdmins);
+  if (!isStrictAdmin && !opts.allowDemoAdmin) {
     return { ok: false, status: 403, code: "FORBIDDEN", message: "Pubkey is not an authorized dispute arbitrator" };
   }
   if (!(OUTCOMES as readonly string[]).includes(opts.outcome)) {
@@ -625,6 +642,19 @@ export async function ruleOnDispute(
   const proposal = propRows[0];
   if (!proposal) {
     return { ok: false, status: 404, code: "NOT_FOUND", message: "Proposal not found" };
+  }
+
+  const mktRows = await db
+    .select()
+    .from(schema.markets)
+    .where(eq(schema.markets.id, proposal.marketId))
+    .limit(1);
+  const targetMarket = mktRows[0];
+  if (!targetMarket) {
+    return { ok: false, status: 404, code: "NOT_FOUND", message: "Market not found" };
+  }
+  if (!isStrictAdmin && !(opts.allowDemoAdmin && targetMarket.isDemo)) {
+    return { ok: false, status: 403, code: "FORBIDDEN", message: "Pubkey is not an authorized dispute arbitrator" };
   }
 
   const now = opts.now ?? new Date();

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { getPublicKey } from "nostr-tools/pure";
 import { getOrGenerateEvidenceSummary } from "@/lib/ai/evidence";
@@ -192,6 +192,7 @@ async function insertShowcaseMarket(
       poolNoMsat: 0,
       feeBps: 200,
       nostrNoteId: noteEvent.id,
+      isDemo: true,
       createdAt: opts.createdAt,
     })
     .returning();
@@ -232,9 +233,9 @@ export async function seedDemoWorkspace(
   const signer = deriveDemoKeypair("signer");
 
   const demoUsers = [
-    { pubkey: alice.pubkey, lightningAddress: "alice@getalby.com", isGuest: false },
-    { pubkey: bob.pubkey, lightningAddress: "bob@getalby.com", isGuest: false },
-    { pubkey: signer.pubkey, lightningAddress: "signer@getalby.com", isGuest: false },
+    { pubkey: alice.pubkey, lightningAddress: "alice@getalby.com", isGuest: true },
+    { pubkey: bob.pubkey, lightningAddress: "bob@getalby.com", isGuest: true },
+    { pubkey: signer.pubkey, lightningAddress: "signer@getalby.com", isGuest: true },
   ];
 
   let createdUsers = 0;
@@ -246,6 +247,16 @@ export async function seedDemoWorkspace(
       .returning();
     if (inserted.length > 0) createdUsers += 1;
   }
+
+  await db
+    .update(schema.users)
+    .set({ isGuest: true })
+    .where(inArray(schema.users.pubkey, demoUsers.map((u) => u.pubkey)));
+
+  await db
+    .update(schema.markets)
+    .set({ isDemo: true })
+    .where(and(inArray(schema.markets.slug, [...DEMO_MARKET_SLUGS]), eq(schema.markets.isDemo, false)));
 
   await db
     .insert(schema.signers)

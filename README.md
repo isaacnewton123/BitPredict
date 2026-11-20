@@ -71,11 +71,21 @@ bun run dev
 
 Interactive Scalar API Reference is served at `http://localhost:3001/openapi` (OpenAPI 3.1 JSON at `http://localhost:3001/openapi/json`).
 
-Seed the 6 showcase demo markets cleanly while `DEMO_MODE` is enabled (idempotent):
+Seed the 6 showcase Demo Sandbox markets (`is_demo = true`, idempotent):
 
 ```bash
 curl -X POST http://localhost:3001/api/v1/demo/seed
 ```
+
+Run a production runtime migration & start without dev dependencies (or build via [Dockerfile](app/Dockerfile)):
+
+```bash
+cd app
+bun run src/migrate.ts
+bun run src/index.ts
+```
+
+Note: In production (`DEMO_MODE=false`), judges and visitors can still select **Use Demo Account** in the Connect modal to trade isolated Demo Sandbox markets with simulated Lightning invoices without touching Live pools or LNbits funds.
 
 Verify backend checks:
 

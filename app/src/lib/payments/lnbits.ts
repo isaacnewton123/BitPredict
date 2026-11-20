@@ -46,7 +46,17 @@ export async function createLightningInvoice(opts: {
   expirySec: number;
   webhookUrl?: string;
   fetchFn?: FetchLike;
+  forceSimulated?: boolean;
 }): Promise<CreatedInvoice> {
+  if (opts.forceSimulated) {
+    const paymentHash = randomBytes(32).toString("hex");
+    return {
+      paymentHash,
+      bolt11: `lnbcsim${opts.amountSats}0n1p${paymentHash.slice(0, 24)}`,
+      simulated: true,
+    };
+  }
+
   const baseUrl = process.env.LNBITS_URL?.trim().replace(/\/+$/, "");
   const invoiceKey = process.env.LNBITS_INVOICE_KEY?.trim();
 
@@ -108,8 +118,13 @@ export interface VerifyPaymentResult {
 
 export async function verifyLightningPayment(
   paymentHash: string,
-  opts: { bolt11?: string; fetchFn?: FetchLike } = {},
+  opts: { bolt11?: string; fetchFn?: FetchLike; allowSimulated?: boolean } = {},
 ): Promise<VerifyPaymentResult> {
+  if (opts.allowSimulated && opts.bolt11?.startsWith("lnbcsim")) {
+    const preimage = createHash("sha256").update(`sim:${paymentHash}`).digest("hex");
+    return { paid: true, preimage };
+  }
+
   const baseUrl = process.env.LNBITS_URL?.trim().replace(/\/+$/, "");
   const invoiceKey = process.env.LNBITS_INVOICE_KEY?.trim();
 
@@ -145,7 +160,7 @@ export type RequestLnurlInvoiceResult =
 export async function requestInvoiceFromLightningAddress(
   address: string,
   amountMsat: number,
-  opts: { fetchFn?: FetchLike } = {},
+  opts: { fetchFn?: FetchLike; forceSimulated?: boolean } = {},
 ): Promise<RequestLnurlInvoiceResult> {
   const normalized = address.trim().toLowerCase();
   const [user, domain] = normalized.split("@");
@@ -154,6 +169,15 @@ export async function requestInvoiceFromLightningAddress(
   }
   if (!Number.isInteger(amountMsat) || amountMsat < 1000) {
     return { ok: false, error: "Payout amount is below 1 satoshi minimum" };
+  }
+
+  if (opts.forceSimulated && !opts.fetchFn) {
+    const hash = createHash("sha256").update(`out:${normalized}:${amountMsat}:${Date.now()}`).digest("hex");
+    return {
+      ok: true,
+      bolt11: `lnbcsimout${Math.floor(amountMsat / 1000)}0n1p${hash.slice(0, 24)}`,
+      simulated: true,
+    };
   }
 
   const baseUrl = process.env.LNBITS_URL?.trim();
@@ -234,11 +258,20 @@ export type PayInvoiceResult =
 
 export async function payLightningInvoice(
   bolt11: string,
-  opts: { fetchFn?: FetchLike } = {},
+  opts: { fetchFn?: FetchLike; forceSimulated?: boolean } = {},
 ): Promise<PayInvoiceResult> {
   const trimmed = bolt11.trim();
   if (!trimmed) {
     return { ok: false, error: "Missing bolt11 invoice" };
+  }
+
+  if (opts.forceSimulated && !opts.fetchFn) {
+    return {
+      ok: true,
+      paymentHash: createHash("sha256").update(`pay:${trimmed}`).digest("hex"),
+      preimage: createHash("sha256").update(`preimage:${trimmed}`).digest("hex"),
+      simulated: true,
+    };
   }
 
   const baseUrl = process.env.LNBITS_URL?.trim().replace(/\/+$/, "");

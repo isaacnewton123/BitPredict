@@ -96,11 +96,33 @@ export function ClaimPayoutModal({
     }
   }
 
-  async function handleClaimManual() {
+  async function handleClaimDemo() {
     setClaiming(true);
     try {
-      const clean = bolt11Input.trim();
-      await onClaim(activePayout.id, clean || undefined);
+      await onClaim(activePayout.id);
+      onClose();
+    } catch (err) {
+      onNotify(
+        "Demo Payout Claim Failed",
+        err instanceof Error ? err.message : "Unable to settle demo payout claim",
+      );
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  async function handleClaimManual() {
+    const clean = bolt11Input.trim();
+    if (!clean) {
+      onNotify(
+        "BOLT11 Invoice Required",
+        "Paste a BOLT11 Lightning invoice or connect a WebLN/NWC wallet to claim live sats.",
+      );
+      return;
+    }
+    setClaiming(true);
+    try {
+      await onClaim(activePayout.id, clean);
       onClose();
     } catch (err) {
       onNotify(
@@ -175,49 +197,15 @@ export function ClaimPayoutModal({
           </div>
         </dl>
 
-        {wallet && (
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-[rgba(148,151,169,0.08)] rounded-[12px]">
-            <button
-              type="button"
-              disabled={claiming}
-              onClick={() =>
-                setSelectedMode({ payoutId: activePayout.id, mode: "wallet" })
-              }
-              className={`py-2 px-3 text-[12px] font-semibold rounded-[10px] transition-colors cursor-pointer ${
-                activeMode === "wallet"
-                  ? "bg-white text-[#101114] shadow-micro"
-                  : "text-[#686b82] hover:text-[#101114]"
-              }`}
-            >
-              Connected Wallet
-            </button>
-            <button
-              type="button"
-              disabled={claiming}
-              onClick={() =>
-                setSelectedMode({ payoutId: activePayout.id, mode: "manual" })
-              }
-              className={`py-2 px-3 text-[12px] font-semibold rounded-[10px] transition-colors cursor-pointer ${
-                activeMode === "manual"
-                  ? "bg-white text-[#101114] shadow-micro"
-                  : "text-[#686b82] hover:text-[#101114]"
-              }`}
-            >
-              Invoice / LNURL
-            </button>
-          </div>
-        )}
-
-        {activeMode === "wallet" && wallet ? (
+        {activePayout.market.isDemo ? (
           <div className="space-y-4">
-            <div className="p-3.5 rounded-[12px] border border-[rgba(20,158,97,0.28)] bg-[rgba(20,158,97,0.08)] space-y-1.5">
-              <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#026b3f]">
-                <LuWallet className="w-3.5 h-3.5" />
-                <span>{wallet.label}</span>
+            <div className="p-3.5 rounded-[12px] border border-[rgba(113,50,245,0.24)] bg-[rgba(133,91,251,0.08)] space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#5741d8]">
+                <LuZap className="w-3.5 h-3.5" />
+                <span>Demo Sandbox Settlement</span>
               </div>
-              <p className="text-[12px] text-[#026b3f] leading-[1.5]">
-                BitPredict will request a fresh BOLT11 invoice from your connected wallet and pay{" "}
-                <strong>{formatSats(activePayout.amount_sats)} sats</strong> straight into it.
+              <p className="text-[12px] text-[#5741d8] leading-[1.5]">
+                Demo market winnings settle immediately using simulated Lightning settlement — no wallet invoice required.
               </p>
             </div>
 
@@ -233,96 +221,171 @@ export function ClaimPayoutModal({
               <button
                 type="button"
                 disabled={claiming}
-                onClick={handleClaimDirectToWallet}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white bg-[#149e61] hover:bg-[#026b3f] disabled:opacity-60 rounded-[12px] cursor-pointer"
+                onClick={handleClaimDemo}
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] disabled:opacity-60 rounded-[12px] cursor-pointer"
               >
                 <LuZap className="w-4 h-4" />
                 <span>
                   {claiming
-                    ? "Requesting Invoice..."
-                    : `Claim ${formatSats(activePayout.amount_sats)} sats to Wallet`}
+                    ? "Settling Demo Payout..."
+                    : `Claim ${formatSats(activePayout.amount_sats)} sats (Demo)`}
                 </span>
               </button>
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label
-                htmlFor="manualBolt11Input"
-                className="block text-[12px] font-semibold text-[#101114]"
-              >
-                BOLT11 Invoice (Optional in Demo)
-              </label>
-              <input
-                id="manualBolt11Input"
-                type="text"
-                value={bolt11Input}
-                onChange={(e) =>
-                  setBolt11Draft({ payoutId: activePayout.id, value: e.target.value })
-                }
-                placeholder="lnbc..."
-                className="w-full h-[42px] px-3.5 text-[13px] font-mono text-[#101114] bg-white border border-[#dedee5] rounded-[10px] focus:outline-none focus:border-[#7132f5]"
-              />
-              <p className="text-[11px] text-[#686b82]">
-                Paste an invoice for {formatSats(activePayout.amount_sats)} sats from any Lightning wallet, or leave blank for instant demo settlement.
-              </p>
-            </div>
-
-            <div className="p-3 rounded-[12px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)] flex flex-wrap items-center justify-between gap-2 text-[12px]">
-              <div className="min-w-0">
-                <p className="font-semibold text-[#101114]">LNURL-Withdraw</p>
-                <p className="font-mono text-[11px] text-[#686b82] truncate max-w-[260px]">
-                  {lnurlString}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
+          <>
+            {wallet && (
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-[rgba(148,151,169,0.08)] rounded-[12px]">
                 <button
                   type="button"
-                  onClick={handleCopyLnurl}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-[#101114] bg-white border border-[#dedee5] hover:border-[#7132f5] rounded-[8px] cursor-pointer"
+                  disabled={claiming}
+                  onClick={() =>
+                    setSelectedMode({ payoutId: activePayout.id, mode: "wallet" })
+                  }
+                  className={`py-2 px-3 text-[12px] font-semibold rounded-[10px] transition-colors cursor-pointer ${
+                    activeMode === "wallet"
+                      ? "bg-white text-[#101114] shadow-micro"
+                      : "text-[#686b82] hover:text-[#101114]"
+                  }`}
                 >
-                  {copiedLnurl ? (
-                    <LuCheck className="w-3.5 h-3.5 text-[#149e61]" />
-                  ) : (
-                    <LuCopy className="w-3.5 h-3.5" />
-                  )}
-                  <span>{copiedLnurl ? "Copied" : "Copy LNURL"}</span>
+                  Connected Wallet
                 </button>
-                <a
-                  href={`lightning:${lnurlString}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-[#7132f5] bg-[rgba(133,91,251,0.12)] hover:bg-[rgba(133,91,251,0.2)] rounded-[8px]"
+                <button
+                  type="button"
+                  disabled={claiming}
+                  onClick={() =>
+                    setSelectedMode({ payoutId: activePayout.id, mode: "manual" })
+                  }
+                  className={`py-2 px-3 text-[12px] font-semibold rounded-[10px] transition-colors cursor-pointer ${
+                    activeMode === "manual"
+                      ? "bg-white text-[#101114] shadow-micro"
+                      : "text-[#686b82] hover:text-[#101114]"
+                  }`}
                 >
-                  <span>Open</span>
-                  <LuExternalLink className="w-3 h-3" />
-                </a>
+                  Invoice / LNURL
+                </button>
               </div>
-            </div>
+            )}
 
-            <div className="flex flex-wrap items-center justify-end gap-2.5">
-              <button
-                type="button"
-                disabled={claiming}
-                onClick={onClose}
-                className="px-4 py-2.5 text-[14px] font-semibold text-[#101114] bg-[rgba(148,151,169,0.08)] hover:bg-[rgba(148,151,169,0.16)] rounded-[12px] cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={claiming}
-                onClick={handleClaimManual}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white bg-[#149e61] hover:bg-[#026b3f] disabled:opacity-60 rounded-[12px] cursor-pointer"
-              >
-                <LuZap className="w-4 h-4" />
-                <span>
-                  {claiming
-                    ? "Settling..."
-                    : `Claim ${formatSats(activePayout.amount_sats)} sats`}
-                </span>
-              </button>
-            </div>
-          </div>
+            {activeMode === "wallet" && wallet ? (
+              <div className="space-y-4">
+                <div className="p-3.5 rounded-[12px] border border-[rgba(20,158,97,0.28)] bg-[rgba(20,158,97,0.08)] space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#026b3f]">
+                    <LuWallet className="w-3.5 h-3.5" />
+                    <span>{wallet.label}</span>
+                  </div>
+                  <p className="text-[12px] text-[#026b3f] leading-[1.5]">
+                    BitPredict will request a fresh BOLT11 invoice from your connected wallet and pay{" "}
+                    <strong>{formatSats(activePayout.amount_sats)} sats</strong> straight into it.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    disabled={claiming}
+                    onClick={onClose}
+                    className="px-4 py-2.5 text-[14px] font-semibold text-[#101114] bg-[rgba(148,151,169,0.08)] hover:bg-[rgba(148,151,169,0.16)] rounded-[12px] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={claiming}
+                    onClick={handleClaimDirectToWallet}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white bg-[#149e61] hover:bg-[#026b3f] disabled:opacity-60 rounded-[12px] cursor-pointer"
+                  >
+                    <LuZap className="w-4 h-4" />
+                    <span>
+                      {claiming
+                        ? "Requesting Invoice..."
+                        : `Claim ${formatSats(activePayout.amount_sats)} sats to Wallet`}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="manualBolt11Input"
+                    className="block text-[12px] font-semibold text-[#101114]"
+                  >
+                    BOLT11 Lightning Invoice
+                  </label>
+                  <input
+                    id="manualBolt11Input"
+                    type="text"
+                    value={bolt11Input}
+                    onChange={(e) =>
+                      setBolt11Draft({ payoutId: activePayout.id, value: e.target.value })
+                    }
+                    placeholder="lnbc..."
+                    className="w-full h-[42px] px-3.5 text-[13px] font-mono text-[#101114] bg-white border border-[#dedee5] rounded-[10px] focus:outline-none focus:border-[#7132f5]"
+                  />
+                  <p className="text-[11px] text-[#686b82]">
+                    Create an invoice for exactly{" "}
+                    <strong>{formatSats(activePayout.amount_sats)} sats</strong> in your Lightning wallet and paste it here, or use LNURL-Withdraw below.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-[12px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)] flex flex-wrap items-center justify-between gap-2 text-[12px]">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#101114]">LNURL-Withdraw</p>
+                    <p className="font-mono text-[11px] text-[#686b82] truncate max-w-[260px]">
+                      {lnurlString}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleCopyLnurl}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-[#101114] bg-white border border-[#dedee5] hover:border-[#7132f5] rounded-[8px] cursor-pointer"
+                    >
+                      {copiedLnurl ? (
+                        <LuCheck className="w-3.5 h-3.5 text-[#149e61]" />
+                      ) : (
+                        <LuCopy className="w-3.5 h-3.5" />
+                      )}
+                      <span>{copiedLnurl ? "Copied" : "Copy LNURL"}</span>
+                    </button>
+                    <a
+                      href={`lightning:${lnurlString}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-[#7132f5] bg-[rgba(133,91,251,0.12)] hover:bg-[rgba(133,91,251,0.2)] rounded-[8px]"
+                    >
+                      <span>Open</span>
+                      <LuExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    disabled={claiming}
+                    onClick={onClose}
+                    className="px-4 py-2.5 text-[14px] font-semibold text-[#101114] bg-[rgba(148,151,169,0.08)] hover:bg-[rgba(148,151,169,0.16)] rounded-[12px] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={claiming || !bolt11Input.trim()}
+                    onClick={handleClaimManual}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white bg-[#149e61] hover:bg-[#026b3f] disabled:opacity-50 rounded-[12px] cursor-pointer"
+                  >
+                    <LuZap className="w-4 h-4" />
+                    <span>
+                      {claiming
+                        ? "Settling..."
+                        : `Claim ${formatSats(activePayout.amount_sats)} sats`}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

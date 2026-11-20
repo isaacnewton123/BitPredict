@@ -13,7 +13,7 @@ import {
 
 interface AdminProposalsPanelProps {
   entries: OracleQueueEntry[];
-  canAct: boolean;
+  canActForMarket: (market: MarketItem) => boolean;
   busyId: string | null;
   onRequestPropose: (market: MarketItem, outcome: "YES" | "NO") => void;
   onRequestFinalize: (market: MarketItem) => void;
@@ -22,7 +22,7 @@ interface AdminProposalsPanelProps {
 /** Operator panel for proposing and finalizing community oracle outcomes. */
 export function AdminProposalsPanel({
   entries,
-  canAct,
+  canActForMarket,
   busyId,
   onRequestPropose,
   onRequestFinalize,
@@ -48,6 +48,7 @@ export function AdminProposalsPanel({
         const activeProp =
           entry.proposals.find((p) => p.status === "ACTIVE") ?? entry.proposals[0];
         const isBusy = busyId === market.id;
+        const canAct = canActForMarket(market);
 
         return (
           <article
@@ -56,9 +57,16 @@ export function AdminProposalsPanel({
           >
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.10)] text-[#484b5e] rounded-[6px]">
-                  {market.category}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.10)] text-[#484b5e] rounded-[6px]">
+                    {market.category}
+                  </span>
+                  {market.isDemo && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-[rgba(133,91,251,0.14)] text-[#7132f5] rounded-[6px]">
+                      Demo
+                    </span>
+                  )}
+                </div>
                 <StatusBadge status={market.status} outcome={market.outcome} size="sm" />
               </div>
 

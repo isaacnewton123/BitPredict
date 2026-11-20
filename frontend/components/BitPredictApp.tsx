@@ -19,6 +19,7 @@ import {
   type MarketItem,
   type MarketSide,
   placeAndSettleBackendBet,
+  type PlaceBetOutcome,
   seedDemoMarketsOnBackend,
   setPendingTradeSide,
   type ToastItem,
@@ -27,6 +28,8 @@ import {
   type UserPositionItem,
 } from "@/lib/bitpredict-data";
 import { fetchNostrProfileLud16 } from "@/lib/lightning-wallet";
+import { useConnectedWallet } from "@/lib/use-connected-wallet";
+import { ConnectAccountModal } from "./auth/ConnectAccountModal";
 import { AppFooter } from "./layout/AppFooter";
 import { AppHeader } from "./layout/AppHeader";
 import { parseRouteState } from "./layout/route-utils";
@@ -65,6 +68,7 @@ export function BitPredictApp({
     ? (consumePendingTradeSide(selectedMarketSlug) ?? "YES")
     : "YES";
 
+  const [selectedMode, setSelectedMode] = useState<"all" | "live" | "demo">("all");
   const [selectedStatus, setSelectedStatus] = useState<"all" | "open" | "closed">("all");
   const [selectedOracle, setSelectedOracle] = useState<"all" | "auto_api" | "nostr_oracle">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,7 +79,9 @@ export function BitPredictApp({
   const [seedingDemo, setSeedingDemo] = useState(false);
 
   const [user, setUser] = useState<BackendUserProfile | null>(() => getCachedUser());
+  const wallet = useConnectedWallet();
   const [connectingWallet, setConnectingWallet] = useState(false);
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [positions, setPositions] = useState<UserPositionItem[]>([]);
   const [payouts, setPayouts] = useState<UserPayoutItem[]>([]);
 
@@ -162,6 +168,8 @@ export function BitPredictApp({
     const q = searchQuery.trim().toLowerCase();
     return markets.filter((m) => {
       const matchesCat = selectedCategory === "All" || m.category === selectedCategory;
+      const matchesMode =
+        selectedMode === "all" || (selectedMode === "demo" ? m.isDemo : !m.isDemo);
       const matchesStatus =
         selectedStatus === "all" ||
         (selectedStatus === "open" ? m.status === "OPEN" : m.status !== "OPEN");
@@ -172,9 +180,9 @@ export function BitPredictApp({
         m.category.toLowerCase().includes(q) ||
         m.oracleLabel.toLowerCase().includes(q) ||
         m.rules.toLowerCase().includes(q);
-      return matchesCat && matchesStatus && matchesOracle && matchesSearch;
+      return matchesCat && matchesMode && matchesStatus && matchesOracle && matchesSearch;
     });
-  }, [markets, selectedCategory, selectedStatus, selectedOracle, searchQuery]);
+  }, [markets, selectedCategory, selectedMode, selectedStatus, selectedOracle, searchQuery]);
 
   const totalPoolVolume = useMemo(
     () => markets.reduce((sum, m) => sum + m.yesPool + m.noPool, 0),
@@ -185,25 +193,26 @@ export function BitPredictApp({
     [markets],
   );
 
-  async function handleConnectOrDisconnect() {
-    if (user) {
-      await logoutFromBackend();
-      setUser(null);
-      setPositions([]);
-      setPayouts([]);
-      showToast("Session Signed Out", "Reconnect Nostr anytime to trade or claim payouts.");
-      return;
-    }
-
+  async function handleLoginMode(mode: "live" | "demo") {
     setConnectingWallet(true);
     try {
-      const logged = await loginWithNostrToBackend();
+      const logged = await loginWithNostrToBackend(mode);
       setUser(logged.user);
+
+      if (mode === "demo" && !markets.some((m) => m.isDemo)) {
+        await seedDemoMarketsOnBackend()
+          .then((seeded) => {
+            setMarkets(seeded.markets);
+            setBackendError(null);
+          })
+          .catch(() => undefined);
+      }
+
       const res = await fetchUserPositionsAndPayouts();
       setPositions(res.positions);
       setPayouts(res.payouts);
       showToast(
-        "Nostr Session Active",
+        mode === "demo" ? "Demo Sandbox Account Active" : "Live Nostr Account Active",
         `${logged.user.npub.slice(0, 12)}...${logged.user.npub.slice(-4)} authenticated`,
       );
       if (!logged.user.is_guest && !logged.user.lightning_address) {
@@ -226,9 +235,18 @@ export function BitPredictApp({
         "Login Failed",
         err instanceof Error ? err.message : "Could not complete Nostr authentication",
       );
+      throw err;
     } finally {
       setConnectingWallet(false);
     }
+  }
+
+  async function handleLogout() {
+    await logoutFromBackend();
+    setUser(null);
+    setPositions([]);
+    setPayouts([]);
+    showToast("Session Signed Out", "Connect a Live Nostr or Demo Account anytime.");
   }
 
   async function handleSeedDemo() {
@@ -255,7 +273,15 @@ export function BitPredictApp({
     market: MarketItem;
     side: MarketSide;
     amountSats: number;
-  }): Promise<{ payment_hash: string; simulated: boolean } | null> {
+  }): Promise<PlaceBetOutcome | null> {
+    if (!user) {
+      setConnectModalOpen(true);
+      showToast(
+        "Connect Account Required",
+        "Select Live Nostr or Demo Account before placing a bet.",
+      );
+      return null;
+    }
     if (opts.amountSats < 10) {
       showToast("Minimum Wager is 10 Sats", "Enter at least 10 sats to place a bet.");
       return null;
@@ -267,12 +293,21 @@ export function BitPredictApp({
         side: opts.side,
         amountSats: opts.amountSats,
       });
-      await Promise.all([loadMarkets(), loadSessionAndPortfolio()]);
-      showToast(
-        `Settled ${formatSats(opts.amountSats)} sats on ${opts.side}`,
-        `Payment ${res.payment_hash.slice(0, 10)}... confirmed in the market pool.`,
-      );
-      return { payment_hash: res.payment_hash, simulated: res.simulated };
+      if (res.status === "settled") {
+        await Promise.all([loadMarkets(), loadSessionAndPortfolio()]);
+        showToast(
+          res.simulated
+            ? `Demo Wager Settled · ${formatSats(opts.amountSats)} sats on ${opts.side}`
+            : `Settled ${formatSats(opts.amountSats)} sats on ${opts.side}`,
+          `Payment ${res.payment_hash.slice(0, 10)}... confirmed in the market pool.`,
+        );
+      } else {
+        showToast(
+          "Lightning Invoice Ready",
+          "Scan the QR code or open in your wallet to confirm the bet.",
+        );
+      }
+      return res;
     } catch (err) {
       showToast(
         "Bet Failed",
@@ -280,6 +315,19 @@ export function BitPredictApp({
       );
       return null;
     }
+  }
+
+  async function handleLiveInvoiceSettled(opts: {
+    market: MarketItem;
+    side: MarketSide;
+    amountSats: number;
+    paymentHash: string;
+  }) {
+    await Promise.all([loadMarkets(), loadSessionAndPortfolio()]);
+    showToast(
+      `Settled ${formatSats(opts.amountSats)} sats on ${opts.side}`,
+      `Payment ${opts.paymentHash.slice(0, 10)}... confirmed in ${opts.market.title.slice(0, 32)}.`,
+    );
   }
 
   async function handleSaveLightningAddress(addr: string) {
@@ -299,6 +347,7 @@ export function BitPredictApp({
   }
 
   function resetAllFilters() {
+    setSelectedMode("all");
     setSelectedStatus("all");
     setSelectedOracle("all");
     setSearchQuery("");
@@ -313,7 +362,8 @@ export function BitPredictApp({
         activeView={activeView}
         user={user}
         connectingWallet={connectingWallet}
-        onConnectOrDisconnect={handleConnectOrDisconnect}
+        onOpenConnectModal={() => setConnectModalOpen(true)}
+        onSwitchToLive={() => setConnectModalOpen(true)}
       />
 
       <main className="flex-1">
@@ -326,9 +376,11 @@ export function BitPredictApp({
             totalPoolVolume={totalPoolVolume}
             autoApiCount={autoApiCount}
             selectedCategory={selectedCategory}
+            selectedMode={selectedMode}
             selectedStatus={selectedStatus}
             selectedOracle={selectedOracle}
             searchQuery={searchQuery}
+            onChangeMode={setSelectedMode}
             onChangeStatus={setSelectedStatus}
             onChangeOracle={setSelectedOracle}
             onChangeSearch={setSearchQuery}
@@ -344,21 +396,30 @@ export function BitPredictApp({
             user={user}
             userPositions={positions}
             onPlaceBet={handlePlaceTerminalBet}
+            onInvoiceSettled={handleLiveInvoiceSettled}
+            onOpenConnectModal={() => setConnectModalOpen(true)}
+            onSwitchAccountMode={handleLoginMode}
+            onNotify={showToast}
           />
         )}
 
         {activeView === "creator" && (
           <CreatorView
+            user={user}
+            onOpenConnectModal={() => setConnectModalOpen(true)}
             onPublished={async (created) => {
               await loadMarkets();
+              setSelectedMode("all");
               setSelectedStatus("all");
               setSelectedOracle("all");
               setSearchQuery("");
               setPendingTradeSide(created.slug, "YES");
               router.push(`/m/${encodeURIComponent(created.slug)}`);
               showToast(
-                "Market Published Live",
-                `"${created.question.slice(0, 48)}..." is now live for Lightning trading.`,
+                created.isDemo ? "Demo Sandbox Market Published" : "Market Published Live",
+                `"${created.question.slice(0, 48)}..." is now live for ${
+                  created.isDemo ? "Demo Sandbox" : "Lightning"
+                } trading.`,
               );
             }}
             onNotify={showToast}
@@ -378,7 +439,7 @@ export function BitPredictApp({
             user={user}
             positions={positions}
             payouts={payouts}
-            onConnectNwc={handleConnectOrDisconnect}
+            onConnectNwc={() => setConnectModalOpen(true)}
             onSaveLightningAddress={handleSaveLightningAddress}
             onClaimPayout={handleClaimPayout}
             onNotify={showToast}
@@ -390,7 +451,7 @@ export function BitPredictApp({
             user={user}
             markets={markets}
             seedingDemo={seedingDemo}
-            onConnectNwc={handleConnectOrDisconnect}
+            onConnectNwc={() => setConnectModalOpen(true)}
             onRefreshMarkets={loadMarkets}
             onSeedDemo={handleSeedDemo}
             onNotify={showToast}
@@ -401,6 +462,16 @@ export function BitPredictApp({
       </main>
 
       <AppFooter />
+
+      <ConnectAccountModal
+        open={connectModalOpen}
+        user={user}
+        wallet={wallet}
+        busy={connectingWallet}
+        onSelectMode={handleLoginMode}
+        onLogout={handleLogout}
+        onClose={() => setConnectModalOpen(false)}
+      />
 
       <ToastStack toasts={toasts} />
     </div>

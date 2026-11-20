@@ -52,12 +52,17 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
         query.track && (RESOLUTION_TRACKS as readonly string[]).includes(query.track)
           ? (query.track as ResolutionTrack)
           : undefined;
+      const modeRaw = query.mode?.toLowerCase();
+      const mode =
+        modeRaw === "live" || modeRaw === "demo" || modeRaw === "all"
+          ? modeRaw
+          : undefined;
       const sort: MarketSort =
         query.sort === "trending" || query.sort === "closing" ? query.sort : "new";
       const limitNum = Number(query.limit ?? 60);
       const limit = Number.isFinite(limitNum) ? Math.min(100, Math.max(1, Math.floor(limitNum))) : 60;
 
-      const markets = await listMarkets({ category, status, track, sort, limit });
+      const markets = await listMarkets({ category, status, track, mode, sort, limit });
       set.headers["cache-control"] = "no-store";
       return { markets };
     },
@@ -66,6 +71,7 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
         category: t.Optional(t.String()),
         status: t.Optional(t.String()),
         track: t.Optional(t.String()),
+        mode: t.Optional(t.String()),
         sort: t.Optional(t.String()),
         limit: t.Optional(t.String()),
       }),
@@ -137,6 +143,7 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
         creatorPubkey: user.pubkey,
         prompt: body.prompt,
         timezone: body.timezone,
+        isDemo: user.is_guest,
         compiled: compiledToSave,
       });
 
@@ -333,11 +340,19 @@ export const marketRoutes = new Elysia({ name: "bitpredict-markets", tags: ["Mar
         return { error: { code: "UNAUTHORIZED", message: "Log in with Nostr before placing a bet" } };
       }
 
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+      const requestOrigin = (() => {
+        try {
+          return new URL(request.url).origin;
+        } catch {
+          return "";
+        }
+      })();
+      const callbackOrigin =
+        process.env.API_PUBLIC_URL?.trim().replace(/\/+$/, "") || requestOrigin;
       const secret = process.env.LNBITS_WEBHOOK_SECRET?.trim();
       const webhookUrl =
-        appUrl && process.env.LNBITS_URL?.trim()
-          ? `${appUrl}/api/v1/webhooks/lnbits${secret ? `?secret=${encodeURIComponent(secret)}` : ""}`
+        callbackOrigin && process.env.LNBITS_URL?.trim()
+          ? `${callbackOrigin}/api/v1/webhooks/lnbits${secret ? `?secret=${encodeURIComponent(secret)}` : ""}`
           : undefined;
 
       const result = await placeBetOrder(db, {

@@ -32,6 +32,7 @@ export interface QueryMarketsOptions {
   category?: Category;
   status?: MarketStatus;
   track?: ResolutionTrack;
+  mode?: "all" | "live" | "demo";
   sort?: MarketSort;
   limit?: number;
 }
@@ -53,6 +54,11 @@ export async function queryMarkets(
   }
   if (opts.track) {
     conditions.push(eq(schema.markets.track, opts.track));
+  }
+  if (opts.mode === "live") {
+    conditions.push(eq(schema.markets.isDemo, false));
+  } else if (opts.mode === "demo") {
+    conditions.push(eq(schema.markets.isDemo, true));
   }
 
   const where = conditions.length === 1 ? conditions[0] : and(...conditions);
@@ -341,7 +347,11 @@ export async function publishMarketDraft(
   });
 
   const relays = getConfiguredRelays();
-  const broadcast = opts.broadcastFn ?? ((ev: VerifiedEvent, r: string[]) => broadcastEventToRelays(ev, r));
+  const broadcast =
+    opts.broadcastFn ??
+    (draft.isDemo
+      ? async () => [] as string[]
+      : (ev: VerifiedEvent, r: string[]) => broadcastEventToRelays(ev, r));
   const [specRelaysOk, noteRelaysOk] = await Promise.all([
     broadcast(specEvent, relays),
     broadcast(noteEvent, relays),

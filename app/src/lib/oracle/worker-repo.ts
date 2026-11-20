@@ -243,7 +243,10 @@ export async function resolveTrackAMarket(
 
   const relays = getConfiguredRelays();
   const broadcast =
-    opts.broadcastFn ?? ((ev: VerifiedEvent, r: string[]) => broadcastEventToRelays(ev, r));
+    opts.broadcastFn ??
+    (market.isDemo
+      ? async () => [] as string[]
+      : (ev: VerifiedEvent, r: string[]) => broadcastEventToRelays(ev, r));
   const relaysOk = await broadcast(attestationEvent, relays);
 
   const txResult = await db.transaction(async (tx) => {
@@ -396,7 +399,11 @@ export async function runOracleTick(
   const retryingTrackA: string[] = [];
 
   for (const m of dueTrackA) {
-    const res = await resolveTrackAMarket(db, m.id, { ...opts, now });
+    const res = await resolveTrackAMarket(db, m.id, {
+      ...opts,
+      allowDemoFallback: Boolean(opts.allowDemoFallback || m.isDemo),
+      now,
+    });
     if (res.ok) {
       resolvedTrackA.push(m.id);
     } else if (res.status === "VOID") {

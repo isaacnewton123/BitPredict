@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 import { and, eq } from "drizzle-orm";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
@@ -9,6 +7,7 @@ import { compileMarketPrompt } from "@/lib/ai/compiler";
 import { getOrGenerateMarketInsight, INSIGHT_DISCLAIMER } from "@/lib/ai/insight";
 import { validateFullMarketSpec } from "@/lib/ai/validate-spec";
 import * as schema from "@/lib/db/schema";
+import { applyTestMigrations } from "@/lib/db/test-migrations";
 import { DEMO_MARKET_SLUGS, seedDemoWorkspace } from "@/lib/demo/seed";
 import type { FetchLike } from "@/lib/domain/constants";
 import { createMarketDraft } from "@/lib/markets/draft-repo";
@@ -16,20 +15,12 @@ import { publishMarketDraft } from "@/lib/markets/publish-repo";
 import { OUTCOME_ATTESTATION_KIND } from "@/lib/nostr/events";
 import { resolveTrackAMarket } from "@/lib/oracle/worker-repo";
 
-const MIGRATION_PATH = path.resolve(process.cwd(), "drizzle/0000_mute_may_parker.sql");
 const FIXED_NOW = new Date("2026-11-19T12:00:00Z");
 
 async function setupMemoryDb(): Promise<{ client: Client; db: LibSQLDatabase<typeof schema> }> {
   const client = createClient({ url: ":memory:" });
   await client.execute("PRAGMA foreign_keys = ON;");
-  const stmts = fs
-    .readFileSync(MIGRATION_PATH, "utf8")
-    .split("--> statement-breakpoint")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const s of stmts) {
-    await client.execute(s);
-  }
+  await applyTestMigrations(client);
   return { client, db: drizzle(client, { schema }) };
 }
 

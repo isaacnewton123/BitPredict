@@ -61,6 +61,11 @@ export function MarketCard({ market: m }: { market: MarketItem }) {
                   )}
                   <span>{m.oracleLabel}</span>
                 </span>
+                {m.isDemo && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[rgba(133,91,251,0.14)] text-[#7132f5] rounded-[6px]">
+                    Demo
+                  </span>
+                )}
                 {!isOpen && <StatusBadge status={m.status} outcome={m.outcome} size="sm" />}
               </div>
               <h3 className="text-[16px] font-semibold text-[#101114] group-hover:text-[#7132f5] leading-[1.35] transition-colors line-clamp-2">

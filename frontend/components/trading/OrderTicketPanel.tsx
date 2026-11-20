@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { LuArrowRight, LuWallet, LuZap } from "react-icons/lu";
+import { LuArrowRight, LuKeyRound, LuWallet, LuZap } from "react-icons/lu";
 import { ConfirmActionModal } from "@/components/shared/ConfirmActionModal";
 import { MarketCover } from "@/components/shared/MarketCover";
 import { SatsIcon } from "@/components/shared/SatsIcon";
@@ -13,9 +13,11 @@ import {
   formatSats,
   type MarketItem,
   type MarketSide,
+  type PlaceBetOutcome,
   type UserPositionItem,
 } from "@/lib/bitpredict-data";
 import { useConnectedWallet } from "@/lib/use-connected-wallet";
+import { LightningInvoiceModal } from "./LightningInvoiceModal";
 
 interface OrderTicketPanelProps {
   market: MarketItem;
@@ -29,7 +31,15 @@ interface OrderTicketPanelProps {
   user: BackendUserProfile | null;
   myMarketPositions: UserPositionItem[];
   onSelectSide: (side: MarketSide) => void;
-  onSubmitBet: (amountSats: number) => Promise<{ payment_hash: string; simulated: boolean } | null>;
+  onSubmitBet: (amountSats: number) => Promise<PlaceBetOutcome | null>;
+  onLiveInvoiceSettled: (opts: {
+    side: MarketSide;
+    amountSats: number;
+    paymentHash: string;
+  }) => Promise<void>;
+  onOpenConnectModal: () => void;
+  onSwitchAccountMode: (mode: "live" | "demo") => Promise<void>;
+  onNotify: (title: string, subtitle: string) => void;
 }
 
 export function OrderTicketPanel({
@@ -45,12 +55,22 @@ export function OrderTicketPanel({
   myMarketPositions,
   onSelectSide,
   onSubmitBet,
+  onLiveInvoiceSettled,
+  onOpenConnectModal,
+  onSwitchAccountMode,
+  onNotify,
 }: OrderTicketPanelProps) {
   const wallet = useConnectedWallet();
   const [amount, setAmount] = useState(5000);
   const [submittingBet, setSubmittingBet] = useState(false);
+  const [switchingMode, setSwitchingMode] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastTxHash, setLastTxHash] = useState<string | null>(null);
+  const [pendingInvoice, setPendingInvoice] = useState<{
+    invoice: Extract<PlaceBetOutcome, { status: "awaiting_payment" }>;
+    side: MarketSide;
+    amountSats: number;
+  } | null>(null);
 
   const cleanAmount = Math.max(10, Math.floor(amount || 0));
   const ticketQuote = calculateBetQuote(market, activeSide, amount);
@@ -67,16 +87,35 @@ export function OrderTicketPanel({
       ? `This market has settled${market.outcome ? ` with outcome ${market.outcome}` : ""}. Winning payouts can be viewed or claimed in your portfolio.`
       : "Trading has closed for this market while oracle resolution is underway.";
 
+  const modeMismatch = Boolean(user && user.is_guest !== market.isDemo);
+
   async function handleConfirm() {
     setSubmittingBet(true);
     try {
       const res = await onSubmitBet(cleanAmount);
-      if (res) {
+      if (res?.status === "settled") {
         setLastTxHash(res.payment_hash);
+      } else if (res?.status === "awaiting_payment") {
+        setPendingInvoice({
+          invoice: res,
+          side: activeSide,
+          amountSats: cleanAmount,
+        });
       }
     } finally {
       setSubmittingBet(false);
       setConfirmOpen(false);
+    }
+  }
+
+  async function handleQuickSwitch(targetMode: "live" | "demo") {
+    setSwitchingMode(true);
+    try {
+      await onSwitchAccountMode(targetMode);
+    } catch {
+      onOpenConnectModal();
+    } finally {
+      setSwitchingMode(false);
     }
   }
 
@@ -248,11 +287,13 @@ export function OrderTicketPanel({
               <span className="inline-flex items-center gap-1.5 min-w-0">
                 <LuWallet className="w-3.5 h-3.5 text-[#7132f5] shrink-0" />
                 <span className="truncate">
-                  {wallet
-                    ? `Wallet connected: ${wallet.label}`
-                    : user
-                      ? "Signed in with Nostr"
-                      : "Guest Nostr session ready"}
+                  {!user
+                    ? "Connect account to trade"
+                    : user.is_guest
+                      ? "Demo Sandbox Account"
+                      : wallet
+                        ? `Wallet connected: ${wallet.label}`
+                        : "Live Nostr Account"}
                 </span>
               </span>
               {user && (
@@ -262,19 +303,55 @@ export function OrderTicketPanel({
               )}
             </div>
 
-            <button
-              type="button"
-              disabled={submittingBet || amount < 10}
-              onClick={() => setConfirmOpen(true)}
-              className="w-full py-3.5 px-4 text-[15px] font-bold text-white bg-[#7132f5] hover:bg-[#5b1ecf] disabled:bg-[rgba(148,151,169,0.35)] rounded-[12px] transition-colors flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <LuZap className="w-4 h-4" />
-              <span>
-                {submittingBet
-                  ? "Settling Lightning Invoice..."
-                  : `Buy ${activeSide} · ${formatSats(cleanAmount)} sats`}
-              </span>
-            </button>
+            {!user ? (
+              <button
+                type="button"
+                onClick={onOpenConnectModal}
+                className="w-full py-3.5 px-4 text-[15px] font-bold text-white bg-[#7132f5] hover:bg-[#5b1ecf] rounded-[12px] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <LuKeyRound className="w-4 h-4" />
+                <span>Connect Account to Trade</span>
+              </button>
+            ) : modeMismatch ? (
+              <div className="p-3.5 rounded-[12px] border border-[rgba(113,50,245,0.28)] bg-[rgba(133,91,251,0.06)] space-y-2.5">
+                <p className="text-[12px] font-bold text-[#5741d8]">
+                  {market.isDemo
+                    ? "Demo Sandbox Market · Play Money"
+                    : "Live Market · Real Sats"}
+                </p>
+                <p className="text-[12px] text-[#686b82] leading-[1.5]">
+                  {market.isDemo
+                    ? "You are signed in with a Live Nostr account. Switch to a Demo Account to test this sandbox market without spending real sats."
+                    : "You are in Demo Sandbox mode. Switch to a Live Nostr account to trade real-sat markets."}
+                </p>
+                <button
+                  type="button"
+                  disabled={switchingMode}
+                  onClick={() => handleQuickSwitch(market.isDemo ? "demo" : "live")}
+                  className="w-full py-2.5 px-4 text-[13px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] disabled:opacity-60 rounded-[10px] transition-colors cursor-pointer"
+                >
+                  {switchingMode
+                    ? "Switching..."
+                    : market.isDemo
+                      ? "Switch to Demo Account"
+                      : "Switch to Live Account"}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={submittingBet || amount < 10}
+                onClick={() => setConfirmOpen(true)}
+                className="w-full py-3.5 px-4 text-[15px] font-bold text-white bg-[#7132f5] hover:bg-[#5b1ecf] disabled:bg-[rgba(148,151,169,0.35)] rounded-[12px] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <LuZap className="w-4 h-4" />
+                <span>
+                  {submittingBet
+                    ? "Settling Lightning Invoice..."
+                    : `Buy ${activeSide} · ${formatSats(cleanAmount)} sats${market.isDemo ? " (Demo)" : ""}`}
+                </span>
+              </button>
+            )}
 
             {lastTxHash && (
               <div className="p-3 rounded-[10px] bg-[rgba(20,158,97,0.14)] text-[#026b3f] text-[12px] space-y-0.5">
@@ -332,8 +409,12 @@ export function OrderTicketPanel({
 
       <ConfirmActionModal
         open={confirmOpen}
-        title={`Confirm ${activeSide} Position`}
-        description="Review your Lightning prediction order before committing satoshis to the pool."
+        title={`Confirm ${activeSide} Position${market.isDemo ? " (Demo)" : ""}`}
+        description={
+          market.isDemo
+            ? "Simulated Demo Sandbox wager — settles instantly with play-money credits and zero real sats."
+            : "Review your Lightning prediction order before committing satoshis to the pool."
+        }
         details={[
           { label: "Market", value: market.title },
           { label: "Side", value: activeSide },
@@ -351,12 +432,37 @@ export function OrderTicketPanel({
             value: `${formatSats(ticketQuote.estPayoutSats)} sats`,
           },
         ]}
-        warning="Lightning wagers are final once settled and remain locked until market resolution."
-        confirmLabel={`Confirm Buy ${activeSide}`}
+        warning={
+          market.isDemo
+            ? "Demo Sandbox mode: simulated invoice will be settled into the demo pool without spending real sats."
+            : "Lightning wagers are final once settled and remain locked until market resolution."
+        }
+        confirmLabel={
+          market.isDemo ? `Confirm Demo Buy ${activeSide}` : `Confirm Buy ${activeSide}`
+        }
         tone={activeSide === "YES" ? "success" : "danger"}
         busy={submittingBet}
         onConfirm={handleConfirm}
         onCancel={() => setConfirmOpen(false)}
+      />
+
+      <LightningInvoiceModal
+        invoice={pendingInvoice?.invoice ?? null}
+        marketTitle={market.title}
+        side={pendingInvoice?.side ?? activeSide}
+        amountSats={pendingInvoice?.amountSats ?? cleanAmount}
+        onSettled={async (settled) => {
+          const settledMeta = pendingInvoice;
+          setPendingInvoice(null);
+          setLastTxHash(settled.payment_hash);
+          await onLiveInvoiceSettled({
+            side: settledMeta?.side ?? activeSide,
+            amountSats: settledMeta?.amountSats ?? cleanAmount,
+            paymentHash: settled.payment_hash,
+          });
+        }}
+        onClose={() => setPendingInvoice(null)}
+        onNotify={onNotify}
       />
     </aside>
   );

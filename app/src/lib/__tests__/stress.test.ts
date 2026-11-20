@@ -1,32 +1,19 @@
-import fs from "node:fs";
-import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 import { and, eq, sql } from "drizzle-orm";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as schema from "@/lib/db/schema";
+import { applyTestMigrations } from "@/lib/db/test-migrations";
 import { getCategory } from "@/lib/domain/categories";
 import { CATEGORIES, RESOLUTION_TRACKS, type Category, type ResolutionTrack } from "@/lib/domain/constants";
 import { MarketSpecSchema, type MarketSpec } from "@/lib/domain/market-spec";
 import { formatSats, impliedYesProbability } from "@/lib/domain/pool";
 import { checkTimeRules } from "@/lib/domain/time-rules";
 
-const MIGRATION_PATH = path.resolve(process.cwd(), "drizzle/0000_mute_may_parker.sql");
-
-function loadMigrationStatements(): string[] {
-  const raw = fs.readFileSync(MIGRATION_PATH, "utf8");
-  return raw
-    .split("--> statement-breakpoint")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
 async function createMigratedMemoryDb(): Promise<{ client: Client; db: LibSQLDatabase<typeof schema> }> {
   const client = createClient({ url: ":memory:" });
   await client.execute("PRAGMA foreign_keys = ON;");
-  for (const stmt of loadMigrationStatements()) {
-    await client.execute(stmt);
-  }
+  await applyTestMigrations(client);
   return { client, db: drizzle(client, { schema }) };
 }
 

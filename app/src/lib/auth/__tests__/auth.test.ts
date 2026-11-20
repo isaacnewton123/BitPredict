@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
@@ -17,8 +15,7 @@ import {
 } from "@/lib/auth/session";
 import { updateUserLightningAddress, upsertUserOnLogin } from "@/lib/auth/user-repo";
 import * as schema from "@/lib/db/schema";
-
-const MIGRATION_PATH = path.resolve(process.cwd(), "drizzle/0000_mute_may_parker.sql");
+import { applyTestMigrations } from "@/lib/db/test-migrations";
 
 function signLogin(
   sk: Uint8Array,
@@ -256,14 +253,7 @@ describe("User persistence (upsertUserOnLogin & updateUserLightningAddress)", ()
   beforeAll(async () => {
     client = createClient({ url: ":memory:" });
     await client.execute("PRAGMA foreign_keys = ON;");
-    const statements = fs
-      .readFileSync(MIGRATION_PATH, "utf8")
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const stmt of statements) {
-      await client.execute(stmt);
-    }
+    await applyTestMigrations(client);
     db = drizzle(client, { schema });
   });
 

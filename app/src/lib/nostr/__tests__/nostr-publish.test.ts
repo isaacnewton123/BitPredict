@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 import { eq } from "drizzle-orm";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
@@ -8,6 +6,7 @@ import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from "nos
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compileMarketPrompt } from "@/lib/ai/compiler";
 import * as schema from "@/lib/db/schema";
+import { applyTestMigrations } from "@/lib/db/test-migrations";
 import { computeSpecSha256, sha256Hex } from "@/lib/domain/spec-hash";
 import { createMarketDraft } from "@/lib/markets/draft-repo";
 import {
@@ -23,7 +22,6 @@ import {
   TEXT_NOTE_KIND,
 } from "@/lib/nostr/events";
 
-const MIGRATION_PATH = path.resolve(process.cwd(), "drizzle/0000_mute_may_parker.sql");
 const FIXED_NOW = new Date("2026-11-19T12:00:00Z");
 
 describe("Nostr market event builders & NIP-19 pointers", () => {
@@ -117,12 +115,7 @@ describe("publishMarketDraft & queryMarkets", () => {
   beforeAll(async () => {
     client = createClient({ url: ":memory:" });
     await client.execute("PRAGMA foreign_keys = ON;");
-    const stmts = fs
-      .readFileSync(MIGRATION_PATH, "utf8")
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const s of stmts) await client.execute(s);
+    await applyTestMigrations(client);
     db = drizzle(client, { schema });
     await db.insert(schema.users).values([{ pubkey: creatorPubkey }, { pubkey: otherPubkey }]);
   });

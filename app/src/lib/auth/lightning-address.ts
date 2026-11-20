@@ -39,7 +39,7 @@ export function isBlockedHost(host: string): boolean {
  */
 export async function validateLightningAddress(
   raw: string,
-  opts: { verifyRemote?: boolean; fetchFn?: FetchLike } = {},
+  opts: { verifyRemote?: boolean; fetchFn?: FetchLike; allowDemoFallback?: boolean } = {},
 ): Promise<LightningAddressValidation> {
   const address = raw.trim().toLowerCase();
   if (!address || address.length > 120 || !LUD16_REGEX.test(address)) {
@@ -104,7 +104,7 @@ export async function validateLightningAddress(
 
     return { ok: true, address, verifiedRemote: true };
   } catch (err) {
-    if (process.env.DEMO_MODE === "true") {
+    if (opts.allowDemoFallback || process.env.DEMO_MODE === "true") {
       return {
         ok: true,
         address,

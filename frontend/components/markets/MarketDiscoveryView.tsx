@@ -24,9 +24,11 @@ interface MarketDiscoveryViewProps {
   totalPoolVolume: number;
   autoApiCount: number;
   selectedCategory: CategoryId;
+  selectedMode: "all" | "live" | "demo";
   selectedStatus: "all" | "open" | "closed";
   selectedOracle: "all" | "auto_api" | "nostr_oracle";
   searchQuery: string;
+  onChangeMode: (next: "all" | "live" | "demo") => void;
   onChangeStatus: (next: "all" | "open" | "closed") => void;
   onChangeOracle: (next: "all" | "auto_api" | "nostr_oracle") => void;
   onChangeSearch: (next: string) => void;
@@ -42,9 +44,11 @@ export function MarketDiscoveryView({
   totalPoolVolume,
   autoApiCount,
   selectedCategory,
+  selectedMode,
   selectedStatus,
   selectedOracle,
   searchQuery,
+  onChangeMode,
   onChangeStatus,
   onChangeOracle,
   onChangeSearch,
@@ -117,6 +121,37 @@ export function MarketDiscoveryView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Pool Mode Filter */}
+          <div
+            role="group"
+            aria-label="Filter by market pool mode"
+            className="inline-flex items-center gap-1 p-1 bg-[rgba(148,151,169,0.08)] rounded-[12px]"
+          >
+            {(
+              [
+                ["all", "All"],
+                ["live", "Live"],
+                ["demo", "Demo"],
+              ] as const
+            ).map(([modeKey, label]) => {
+              const active = selectedMode === modeKey;
+              return (
+                <button
+                  key={modeKey}
+                  type="button"
+                  onClick={() => onChangeMode(modeKey)}
+                  className={
+                    active
+                      ? "px-3 py-1.5 text-[13px] font-semibold rounded-[9px] bg-white text-[#101114] shadow-micro transition-colors cursor-pointer"
+                      : "px-3 py-1.5 text-[13px] font-medium rounded-[9px] text-[#686b82] hover:text-[#101114] transition-colors cursor-pointer"
+                  }
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Status Filter */}
           <div
             role="group"

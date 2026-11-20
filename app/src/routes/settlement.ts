@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { getOrGenerateEvidenceSummary } from "@/lib/ai/evidence";
 import { getCurrentUserFromRequest } from "@/lib/auth/server";
@@ -39,6 +39,47 @@ export const settlementRoutes = new Elysia({ name: "bitpredict-settlement", tags
       params: t.Object({ id: t.String() }),
       detail: {
         summary: "Get bet payment & confirmation status",
+        tags: ["Markets & Betting"],
+      },
+    },
+  )
+  .post(
+    "/api/v1/bets/:id/confirm",
+    async ({ request, params, set }) => {
+      const user = await getCurrentUserFromRequest(request);
+      if (!user) {
+        set.status = 401;
+        return { error: { code: "UNAUTHORIZED", message: "Log in with Nostr to confirm a bet" } };
+      }
+
+      const bet = await getBetByIdFromDb(db, params.id);
+      if (!bet) {
+        set.status = 404;
+        return { error: { code: "NOT_FOUND", message: "Bet not found" } };
+      }
+      if (bet.userPubkey !== user.pubkey) {
+        set.status = 403;
+        return { error: { code: "FORBIDDEN", message: "Not bet owner" } };
+      }
+
+      const settled = await settleBetByPaymentHash(db, { paymentHash: bet.paymentHash });
+      if (!settled.ok) {
+        set.status = settled.status;
+        return { error: { code: settled.code, message: settled.message } };
+      }
+
+      return {
+        ok: true,
+        status: settled.bet.status,
+        idempotent: settled.idempotent,
+        pool_yes_msat: settled.market.poolYesMsat,
+        pool_no_msat: settled.market.poolNoMsat,
+      };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      detail: {
+        summary: "Verify & confirm bet payment for the authenticated bet owner",
         tags: ["Markets & Betting"],
       },
     },
@@ -156,34 +197,62 @@ export const settlementRoutes = new Elysia({ name: "bitpredict-settlement", tags
         force_finalize_proposal?: boolean;
       };
       const demoAllowed = process.env.DEMO_MODE !== "false";
+      const marketIdTrimmed = typeof b.market_id === "string" ? b.market_id.trim() : "";
 
-      if (demoAllowed && typeof b.market_id === "string" && b.market_id.trim() && b.force_finalize_proposal === true) {
-        const finalized = await finalizeExpiredProposals(db, {
-          marketId: b.market_id.trim(),
-          forceFinalizeInDemo: true,
-        });
-        if (finalized.length === 0) {
-          set.status = 409;
-          return { error: { code: "NOT_PROPOSED", message: "No active Track B proposal found to finalize" } };
+      if (marketIdTrimmed && (b.force_finalize_proposal === true || b.force_demo_resolve === true)) {
+        const targetRows = await db
+          .select()
+          .from(schema.markets)
+          .where(
+            or(
+              eq(schema.markets.id, marketIdTrimmed),
+              eq(schema.markets.slug, marketIdTrimmed),
+            ),
+          )
+          .limit(1);
+        const targetMarket = targetRows[0];
+        if (!targetMarket) {
+          set.status = 404;
+          return { error: { code: "NOT_FOUND", message: "Market not found" } };
         }
-        return { mode: "demo_finalize_proposal", finalized };
-      }
+        if (!targetMarket.isDemo && !demoAllowed) {
+          set.status = 403;
+          return {
+            error: {
+              code: "FORBIDDEN",
+              message: "Instant resolution shortcuts are only available on Demo Sandbox markets.",
+            },
+          };
+        }
 
-      if (demoAllowed && typeof b.market_id === "string" && b.market_id.trim() && b.force_demo_resolve === true) {
-        const res = await resolveTrackAMarket(db, b.market_id.trim(), {
-          forceResolveNow: true,
-          allowDemoFallback: true,
-        });
-        if (!res.ok) {
-          set.status = res.status === "NOT_FOUND" ? 404 : 409;
-          return { error: { code: res.status, message: res.reason } };
+        if (b.force_finalize_proposal === true) {
+          const finalized = await finalizeExpiredProposals(db, {
+            marketId: targetMarket.id,
+            forceFinalizeInDemo: true,
+          });
+          if (finalized.length === 0) {
+            set.status = 409;
+            return { error: { code: "NOT_PROPOSED", message: "No active Track B proposal found to finalize" } };
+          }
+          return { mode: "demo_finalize_proposal", finalized };
         }
-        return {
-          mode: "demo_force_resolve",
-          market: res.market,
-          proof: res.proof,
-          attestation_event: res.attestation_event,
-        };
+
+        if (b.force_demo_resolve === true) {
+          const res = await resolveTrackAMarket(db, targetMarket.id, {
+            forceResolveNow: true,
+            allowDemoFallback: true,
+          });
+          if (!res.ok) {
+            set.status = res.status === "NOT_FOUND" ? 404 : 409;
+            return { error: { code: res.status, message: res.reason } };
+          }
+          return {
+            mode: "demo_force_resolve",
+            market: res.market,
+            proof: res.proof,
+            attestation_event: res.attestation_event,
+          };
+        }
       }
 
       const summary = await runOracleTick(db, { allowDemoFallback: demoAllowed });
@@ -271,7 +340,15 @@ export const settlementRoutes = new Elysia({ name: "bitpredict-settlement", tags
         return { status: "OK", preimage: claimed.payout.preimage };
       }
 
-      const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin).replace(/\/+$/, "");
+      const requestOrigin = (() => {
+        try {
+          return new URL(request.url).origin;
+        } catch {
+          return "";
+        }
+      })();
+      const baseUrl =
+        process.env.API_PUBLIC_URL?.trim().replace(/\/+$/, "") || requestOrigin;
       const satsMsat = Math.floor(payout.amountMsat / 1000) * 1000;
       set.headers["cache-control"] = "no-store";
       return {
@@ -308,6 +385,7 @@ export const settlementRoutes = new Elysia({ name: "bitpredict-settlement", tags
         disputeId: params.id,
         adminPubkey: user.pubkey,
         outcome: body.outcome as Outcome,
+        allowDemoAdmin: user.is_guest,
       });
 
       if (!res.ok) {
@@ -335,10 +413,6 @@ export const settlementRoutes = new Elysia({ name: "bitpredict-settlement", tags
   .post(
     "/api/v1/demo/seed",
     async ({ set }) => {
-      if (process.env.DEMO_MODE === "false") {
-        set.status = 403;
-        return { error: { code: "FORBIDDEN", message: "Demo mode seeding is disabled" } };
-      }
       const result = await seedDemoWorkspace(db);
       set.headers["cache-control"] = "no-store";
       return { ok: true, ...result };

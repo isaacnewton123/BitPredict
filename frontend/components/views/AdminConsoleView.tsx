@@ -102,7 +102,9 @@ export function AdminConsoleView({
     };
   }, []);
 
-  const canAct = Boolean(user && user.is_admin !== false);
+  const canActForMarket = (market: MarketItem) =>
+    Boolean(user && (user.is_admin || (user.is_guest && market.isDemo)));
+  const canSeedDemo = Boolean(user && (user.is_admin || user.is_guest));
 
   const disputedEntries = queue.filter(
     (e) => e.market.status === "DISPUTED" || e.disputes.some((d) => d.status === "OPEN"),
@@ -360,8 +362,21 @@ export function AdminConsoleView({
             className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] rounded-[12px] transition-colors cursor-pointer"
           >
             <LuZap className="w-4 h-4" />
-            <span>Sign In with Nostr</span>
+            <span>Connect Account</span>
           </button>
+        </div>
+      ) : user.is_guest ? (
+        <div className="p-4 rounded-[16px] border border-[rgba(113,50,245,0.28)] bg-[rgba(133,91,251,0.06)] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-[#5741d8] text-[13px] font-semibold">
+            <LuShieldCheck className="w-4 h-4 shrink-0" />
+            <span>Demo Sandbox Operator Active</span>
+            <span className="font-mono text-[12px] px-2 py-0.5 rounded-[6px] bg-white/80">
+              {user.npub.slice(0, 14)}...{user.npub.slice(-6)}
+            </span>
+          </div>
+          <span className="text-[12px] text-[#5741d8]">
+            Enabled for Demo Sandbox markets only — live markets remain restricted to operator keys.
+          </span>
         </div>
       ) : user.is_admin === false ? (
         <div className="p-4 rounded-[16px] border border-[rgba(220,38,38,0.28)] bg-[rgba(220,38,38,0.06)] flex items-start gap-3">
@@ -458,14 +473,14 @@ export function AdminConsoleView({
       ) : activeTab === "disputes" ? (
         <AdminDisputesPanel
           entries={disputedEntries}
-          canAct={canAct}
+          canActForMarket={canActForMarket}
           busyId={busyId}
           onRequestRule={handleRequestRule}
         />
       ) : activeTab === "proposals" ? (
         <AdminProposalsPanel
           entries={proposalEntries}
-          canAct={canAct}
+          canActForMarket={canActForMarket}
           busyId={busyId}
           onRequestPropose={handleRequestPropose}
           onRequestFinalize={handleRequestFinalize}
@@ -473,7 +488,8 @@ export function AdminConsoleView({
       ) : (
         <AdminFeedsOpsPanel
           trackAMarkets={trackAMarkets}
-          canAct={canAct}
+          canActForMarket={canActForMarket}
+          canSeedDemo={canSeedDemo}
           busyId={busyId}
           seedingDemo={seedingDemo}
           onRequestTrackAResolve={handleRequestTrackAResolve}

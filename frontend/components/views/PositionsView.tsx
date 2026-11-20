@@ -56,11 +56,24 @@ export function PositionsView({
             className="inline-flex items-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] rounded-[12px] cursor-pointer"
           >
             <LuKeyRound className="w-4 h-4" />
-            <span>Sign In with Nostr</span>
+            <span>Connect Account</span>
           </button>
         ) : (
-          <div className="px-4 py-2 rounded-[12px] bg-[rgba(20,158,97,0.16)] text-[#026b3f] text-[13px] font-semibold font-mono">
-            {user.npub.slice(0, 14)}...{user.npub.slice(-6)}
+          <div
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-[12px] text-[13px] font-semibold font-mono ${
+              user.is_guest
+                ? "bg-[rgba(133,91,251,0.14)] text-[#5741d8]"
+                : "bg-[rgba(20,158,97,0.16)] text-[#026b3f]"
+            }`}
+          >
+            {user.is_guest && (
+              <span className="px-1.5 py-0.5 text-[10px] font-sans font-bold bg-[#7132f5] text-white rounded-[5px]">
+                DEMO
+              </span>
+            )}
+            <span>
+              {user.npub.slice(0, 14)}...{user.npub.slice(-6)}
+            </span>
           </div>
         )}
       </div>
@@ -91,6 +104,11 @@ export function PositionsView({
                     <span className="px-2 py-0.5 text-[11px] font-semibold bg-[rgba(20,158,97,0.16)] text-[#026b3f] rounded-[6px]">
                       {pay.kind}
                     </span>
+                    {pay.market.isDemo && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[rgba(133,91,251,0.14)] text-[#7132f5] rounded-[5px]">
+                        Demo
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1.5 text-[14px] font-bold text-[#101114]">
                       <SatsIcon className="w-4 h-4 shrink-0" />
                       <span>{formatSats(pay.amount_sats)} sats</span>
@@ -171,6 +189,11 @@ export function PositionsView({
                     >
                       {pos.side}
                     </span>
+                    {pos.market.isDemo && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[rgba(133,91,251,0.14)] text-[#7132f5] rounded-[5px]">
+                        Demo
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#101114]">
                       <SatsIcon className="w-3.5 h-3.5 shrink-0" />
                       <span>{formatSats(pos.amount_sats)} sats</span>

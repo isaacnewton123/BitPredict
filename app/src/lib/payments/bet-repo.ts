@@ -1,5 +1,6 @@
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
+import QRCode from "qrcode";
 import * as schema from "@/lib/db/schema";
 import { SIDES, type Side } from "@/lib/domain/constants";
 import { estimatePotentialPayoutMsat } from "@/lib/domain/pool";
@@ -22,6 +23,7 @@ export type PlaceBetResult =
       payment_hash: string;
       expires_at: string;
       simulated: boolean;
+      qr_data_url?: string | null;
     }
   | {
       ok: false;
@@ -70,6 +72,32 @@ export async function placeBetOrder(
     return { ok: false, status: 404, code: "NOT_FOUND", message: "Market not found" };
   }
 
+  const normalizedPubkey = opts.userPubkey.toLowerCase();
+  const userRows = await db
+    .select({ isGuest: schema.users.isGuest })
+    .from(schema.users)
+    .where(eq(schema.users.pubkey, normalizedPubkey))
+    .limit(1);
+  const bettor = userRows[0];
+
+  if (market.isDemo && bettor && !bettor.isGuest) {
+    return {
+      ok: false,
+      status: 403,
+      code: "MODE_MISMATCH",
+      message: "This is a Demo Sandbox market. Switch to a Demo Account to trade here.",
+    };
+  }
+  if (!market.isDemo && bettor?.isGuest) {
+    return {
+      ok: false,
+      status: 403,
+      code: "MODE_MISMATCH",
+      message:
+        "Demo accounts can only trade on Demo Sandbox markets. Sign in with a Live Nostr account to trade live markets.",
+    };
+  }
+
   const now = opts.now ?? new Date();
   const secLeft = Math.floor((market.bettingCutoff.getTime() - now.getTime()) / 1000);
   if (market.status !== "OPEN" || secLeft < 5) {
@@ -106,6 +134,7 @@ export async function placeBetOrder(
       memo: `BitPredict ${opts.side}: ${market.title}`,
       expirySec,
       webhookUrl: opts.webhookUrl,
+      forceSimulated: market.isDemo,
     });
   } catch (err) {
     return {
@@ -116,13 +145,25 @@ export async function placeBetOrder(
     };
   }
 
+  let qrDataUrl: string | null = null;
+  if (!invoice.simulated) {
+    try {
+      qrDataUrl = await QRCode.toDataURL(`lightning:${invoice.bolt11}`, {
+        margin: 1,
+        width: 240,
+      });
+    } catch {
+      qrDataUrl = null;
+    }
+  }
+
   const betId = crypto.randomUUID();
   const amountMsat = opts.amountSats * 1000;
 
   await db.insert(schema.bets).values({
     id: betId,
     marketId: market.id,
-    userPubkey: opts.userPubkey.toLowerCase(),
+    userPubkey: normalizedPubkey,
     side: opts.side,
     amountMsat,
     paymentHash: invoice.paymentHash,
@@ -141,6 +182,7 @@ export async function placeBetOrder(
     payment_hash: invoice.paymentHash,
     expires_at: new Date(now.getTime() + expirySec * 1000).toISOString(),
     simulated: invoice.simulated,
+    qr_data_url: qrDataUrl,
   };
 }
 
@@ -185,8 +227,17 @@ export async function settleBetByPaymentHash(
     return { ok: true, idempotent: true, bet: existing, market: mktRows[0] };
   }
 
+  const mktPreRows = await db
+    .select({ isDemo: schema.markets.isDemo })
+    .from(schema.markets)
+    .where(eq(schema.markets.id, existing.marketId))
+    .limit(1);
+
   const verifyFn = opts.verifyPaymentFn ?? verifyLightningPayment;
-  const verified = await verifyFn(opts.paymentHash, { bolt11: existing.bolt11 });
+  const verified = await verifyFn(opts.paymentHash, {
+    bolt11: existing.bolt11,
+    allowSimulated: Boolean(mktPreRows[0]?.isDemo),
+  });
   if (!verified.paid) {
     return { ok: false, status: 402, code: "PAYMENT_NOT_PAID", message: "Invoice has not been paid" };
   }
@@ -314,6 +365,7 @@ export async function listUserPositionsFromDb(
         poolYesMsat: schema.markets.poolYesMsat,
         poolNoMsat: schema.markets.poolNoMsat,
         feeBps: schema.markets.feeBps,
+        isDemo: schema.markets.isDemo,
       },
     })
     .from(schema.bets)

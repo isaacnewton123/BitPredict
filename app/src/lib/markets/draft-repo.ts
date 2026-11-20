@@ -54,6 +54,7 @@ export async function createMarketDraft(
     creatorPubkey: string;
     prompt: string;
     timezone?: string;
+    isDemo?: boolean;
     compiled: ValidCompileResult;
   },
 ): Promise<DraftDto> {
@@ -76,6 +77,7 @@ export async function createMarketDraft(
       bettingCutoff: new Date(spec.betting_cutoff_utc),
       deadlineUtc: new Date(spec.deadline_utc),
       resolveAfter: new Date(spec.resolve_after_utc),
+      isDemo: Boolean(opts.isDemo),
     });
 
     await tx.insert(schema.aiRuns).values({

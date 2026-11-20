@@ -12,7 +12,8 @@ import { formatSats, type MarketItem } from "@/lib/bitpredict-data";
 
 interface AdminFeedsOpsPanelProps {
   trackAMarkets: MarketItem[];
-  canAct: boolean;
+  canActForMarket: (market: MarketItem) => boolean;
+  canSeedDemo: boolean;
   busyId: string | null;
   seedingDemo: boolean;
   onRequestTrackAResolve: (market: MarketItem) => void;
@@ -22,7 +23,8 @@ interface AdminFeedsOpsPanelProps {
 /** Automated data-feed status table and workspace operations panel. */
 export function AdminFeedsOpsPanel({
   trackAMarkets,
-  canAct,
+  canActForMarket,
+  canSeedDemo,
   busyId,
   seedingDemo,
   onRequestTrackAResolve,
@@ -69,6 +71,7 @@ export function AdminFeedsOpsPanel({
                   const condition = formatOracleCondition(m.oracleConfig) ?? "Auto Check";
                   const resolved = m.status === "SETTLED" || m.status === "RESOLVED";
                   const isBusy = busyId === m.id;
+                  const canAct = canActForMarket(m);
 
                   return (
                     <tr key={m.id} className="hover:bg-[rgba(148,151,169,0.03)]">
@@ -79,7 +82,14 @@ export function AdminFeedsOpsPanel({
                         >
                           {m.question}
                         </Link>
-                        <span className="text-[11px] text-[#9497a9]">{m.category}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] text-[#9497a9]">{m.category}</span>
+                          {m.isDemo && (
+                            <span className="px-1.5 py-0.2 text-[10px] font-bold bg-[rgba(133,91,251,0.14)] text-[#7132f5] rounded-[5px]">
+                              Demo
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-[#101114] font-medium whitespace-nowrap">
                         {formatProviderName(providerRaw)}
@@ -142,7 +152,7 @@ export function AdminFeedsOpsPanel({
 
         <button
           type="button"
-          disabled={!canAct || seedingDemo}
+          disabled={!canSeedDemo || seedingDemo}
           onClick={onRequestSeedDemo}
           className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-[#026b3f] bg-[rgba(20,158,97,0.16)] hover:bg-[#149e61] hover:text-white disabled:opacity-45 rounded-[12px] transition-colors cursor-pointer"
         >

@@ -126,6 +126,7 @@ export interface MarketItem {
   feeBps: number;
   status: string;
   outcome: MarketOutcome;
+  isDemo: boolean;
   specSha256: string;
   nostrNoteId: string;
   spec: Record<string, unknown>;
@@ -151,6 +152,7 @@ export interface BackendUserProfile {
   lightning_address: string | null;
   is_guest: boolean;
   is_admin?: boolean;
+  account_mode?: "live" | "demo";
 }
 
 export interface UserPositionItem {
@@ -168,6 +170,7 @@ export interface UserPositionItem {
     category: string;
     status: string;
     outcome: string | null;
+    isDemo: boolean;
   };
 }
 
@@ -186,6 +189,7 @@ export interface UserPayoutItem {
     title: string;
     status: string;
     outcome: string | null;
+    isDemo: boolean;
   };
 }
 
@@ -424,6 +428,7 @@ export function mapBackendMarket(raw: Record<string, unknown>): MarketItem {
     outcome: (raw.outcome === "YES" || raw.outcome === "NO" || raw.outcome === "INVALID"
       ? raw.outcome
       : null),
+    isDemo: Boolean(raw.isDemo),
     specSha256: String(raw.specSha256 ?? ""),
     nostrNoteId: String(raw.nostrNoteId ?? raw.slug),
     spec,
@@ -549,10 +554,20 @@ export async function getCurrentBackendUser(): Promise<BackendUserProfile | null
   }
 }
 
-export async function loginWithNostrToBackend(): Promise<{
+export async function loginWithNostrToBackend(
+  mode: "live" | "demo" = "demo",
+): Promise<{
   user: BackendUserProfile;
   token: string;
 }> {
+  if (mode === "live") {
+    if (typeof window === "undefined" || !window.nostr) {
+      throw new Error(
+        "No Nostr browser extension (NIP-07) detected. Install Alby or nos2x, or use a Demo Account.",
+      );
+    }
+  }
+
   const { challenge } = await apiRequest<{ challenge: string }>("/api/v1/auth/challenge");
   const base = getApiBase() || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3001");
   const authUrl = `${base}/api/v1/auth/nostr`;
@@ -568,23 +583,11 @@ export async function loginWithNostrToBackend(): Promise<{
     content: `BitPredict login challenge: ${challenge}`,
   };
 
-  let signedEvent: unknown;
-  let isGuest = false;
-
-  if (typeof window !== "undefined" && window.nostr) {
-    try {
-      signedEvent = await window.nostr.signEvent(template);
-    } catch {
-      isGuest = true;
-    }
-  } else {
-    isGuest = true;
-  }
-
-  if (!signedEvent) {
-    const guest = getOrCreateLocalKeypair(GUEST_SK_STORAGE_KEY);
-    signedEvent = finalizeEvent(template, guest.secretKey);
-  }
+  const isGuest = mode === "demo";
+  const signedEvent =
+    mode === "live"
+      ? await window.nostr!.signEvent(template)
+      : finalizeEvent(template, getOrCreateLocalKeypair(GUEST_SK_STORAGE_KEY).secretKey);
 
   const res = await apiRequest<{ user: BackendUserProfile; token: string }>(
     "/api/v1/auth/nostr",
@@ -607,8 +610,7 @@ export async function logoutFromBackend(): Promise<void> {
 export async function ensureBackendSession(): Promise<BackendUserProfile> {
   const existing = await getCurrentBackendUser();
   if (existing) return existing;
-  const logged = await loginWithNostrToBackend();
-  return logged.user;
+  throw new Error("Please connect a Live Nostr or Demo Account first.");
 }
 
 export async function uploadMarketImage(file: File): Promise<{
@@ -673,45 +675,90 @@ export async function publishBackendMarketDraft(
   return { market: mapBackendMarket(res.market) };
 }
 
+export type PlaceBetOutcome =
+  | {
+      status: "settled";
+      bet_id: string;
+      payment_hash: string;
+      pool_yes_msat: number;
+      pool_no_msat: number;
+      simulated: boolean;
+    }
+  | {
+      status: "awaiting_payment";
+      bet_id: string;
+      payment_hash: string;
+      bolt11: string;
+      expires_at: string;
+      qr_data_url: string | null;
+      simulated: false;
+    };
+
+export async function confirmBackendBet(betId: string): Promise<{
+  status: string;
+  idempotent: boolean;
+  pool_yes_msat: number;
+  pool_no_msat: number;
+}> {
+  return apiRequest(`/api/v1/bets/${encodeURIComponent(betId)}/confirm`, {
+    method: "POST",
+  });
+}
+
 export async function placeAndSettleBackendBet(opts: {
   marketId: string;
   side: MarketSide;
   amountSats: number;
-}): Promise<{
-  payment_hash: string;
-  pool_yes_msat: number;
-  pool_no_msat: number;
-  simulated: boolean;
-}> {
+}): Promise<PlaceBetOutcome> {
   await ensureBackendSession();
   const order = await apiRequest<{
+    bet_id: string;
     payment_hash: string;
     bolt11: string;
+    expires_at: string;
     simulated: boolean;
+    qr_data_url?: string | null;
   }>(`/api/v1/markets/${encodeURIComponent(opts.marketId)}/bets`, {
     method: "POST",
     body: JSON.stringify({ side: opts.side, amount_sats: opts.amountSats }),
   });
 
-  // In real LNbits mode, pay the BOLT11 invoice via the user's connected WebLN/NWC wallet if linked
-  if (!order.simulated && order.bolt11) {
-    await payInvoiceWithConnectedWallet(order.bolt11);
+  if (order.simulated) {
+    const confirmed = await confirmBackendBet(order.bet_id);
+    return {
+      status: "settled",
+      bet_id: order.bet_id,
+      payment_hash: order.payment_hash,
+      pool_yes_msat: confirmed.pool_yes_msat,
+      pool_no_msat: confirmed.pool_no_msat,
+      simulated: true,
+    };
   }
 
-  // In simulated demo mode or immediately after wallet payment, confirm invoice via webhook
-  const settled = await apiRequest<{
-    pool_yes_msat: number;
-    pool_no_msat: number;
-  }>("/api/v1/webhooks/lnbits", {
-    method: "POST",
-    body: JSON.stringify({ payment_hash: order.payment_hash }),
-  });
+  const walletPaid = order.bolt11
+    ? await payInvoiceWithConnectedWallet(order.bolt11)
+    : null;
+
+  if (walletPaid !== null) {
+    const confirmed = await confirmBackendBet(order.bet_id);
+    return {
+      status: "settled",
+      bet_id: order.bet_id,
+      payment_hash: order.payment_hash,
+      pool_yes_msat: confirmed.pool_yes_msat,
+      pool_no_msat: confirmed.pool_no_msat,
+      simulated: false,
+    };
+  }
 
   return {
+    status: "awaiting_payment",
+    bet_id: order.bet_id,
     payment_hash: order.payment_hash,
-    pool_yes_msat: settled.pool_yes_msat,
-    pool_no_msat: settled.pool_no_msat,
-    simulated: order.simulated,
+    bolt11: order.bolt11,
+    expires_at: order.expires_at,
+    qr_data_url: order.qr_data_url ?? null,
+    simulated: false,
   };
 }
 
@@ -747,6 +794,7 @@ export async function fetchUserPositionsAndPayouts(): Promise<{
         category: String(mkt.category ?? ""),
         status: String(mkt.status ?? ""),
         outcome: mkt.outcome ? String(mkt.outcome) : null,
+        isDemo: Boolean(mkt.isDemo),
       },
     };
   });
@@ -768,6 +816,7 @@ export async function fetchUserPositionsAndPayouts(): Promise<{
         title: String(mkt.title ?? ""),
         status: String(mkt.status ?? ""),
         outcome: mkt.outcome ? String(mkt.outcome) : null,
+        isDemo: Boolean(mkt.isDemo),
       },
     };
   });
@@ -876,21 +925,25 @@ export async function submitBackendTrackBDispute(
   market: MarketItem,
   proposalEventId: string,
 ): Promise<void> {
-  await ensureBackendSession();
-  const challenger = getOrCreateLocalKeypair(GUEST_SK_STORAGE_KEY);
-  const event = finalizeEvent(
-    {
-      kind: 30080,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ["d", `dispute:${market.slug}`],
-        ["e", proposalEventId, "", "reply"],
-        ["proof", `https://bitpredict.local/dispute/${encodeURIComponent(market.slug)}`],
-      ],
-      content: "Challenging outcome proposal during optimistic challenge window",
-    },
-    challenger.secretKey,
-  );
+  const current = await ensureBackendSession();
+  const template: EventTemplate = {
+    kind: 30080,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ["d", `dispute:${market.slug}`],
+      ["e", proposalEventId, "", "reply"],
+      ["proof", `https://bitpredict.local/dispute/${encodeURIComponent(market.slug)}`],
+    ],
+    content: "Challenging outcome proposal during optimistic challenge window",
+  };
+
+  const event =
+    !current.is_guest && typeof window !== "undefined" && window.nostr
+      ? await window.nostr.signEvent(template)
+      : finalizeEvent(
+          template,
+          getOrCreateLocalKeypair(GUEST_SK_STORAGE_KEY).secretKey,
+        );
 
   await apiRequest(`/api/v1/markets/${encodeURIComponent(market.id)}/disputes`, {
     method: "POST",
