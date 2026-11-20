@@ -2,6 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { Elysia, t } from "elysia";
 import { getCurrentUserFromRequest } from "@/lib/auth/server";
+import {
+  buildR2ObjectKey,
+  buildR2PublicUrl,
+  getObjectFromR2,
+  getR2Config,
+  isR2StrictDriver,
+  uploadObjectToR2,
+} from "@/lib/storage/r2";
 
 const UPLOAD_DIR = path.resolve(process.cwd(), "data/uploads");
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -99,8 +107,53 @@ export const uploadRoutes = new Elysia({ name: "upload-routes" })
         };
       }
 
-      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
       const filename = `${crypto.randomUUID()}.${detected.ext}`;
+      const r2 = getR2Config();
+
+      if (!r2 && isR2StrictDriver()) {
+        set.status = 503;
+        return {
+          error: {
+            code: "STORAGE_NOT_CONFIGURED",
+            message:
+              "Cloudflare R2 storage is required (STORAGE_DRIVER=r2) but R2 credentials are incomplete.",
+          },
+        };
+      }
+
+      if (r2) {
+        const key = buildR2ObjectKey(filename, r2.keyPrefix);
+        const uploaded = await uploadObjectToR2(r2, {
+          key,
+          body: bytes,
+          contentType: detected.mime,
+        });
+        if (!uploaded.ok) {
+          set.status = 502;
+          return {
+            error: {
+              code: "STORAGE_UPLOAD_FAILED",
+              message: uploaded.error,
+            },
+          };
+        }
+
+        const displayUrl = r2.publicUrl
+          ? buildR2PublicUrl(r2.publicUrl, key)
+          : `/api/v1/uploads/${filename}`;
+
+        set.status = 201;
+        return {
+          url: displayUrl,
+          filename,
+          key,
+          storage: "r2" as const,
+          mime: detected.mime,
+          size: bytes.byteLength,
+        };
+      }
+
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
       const targetPath = path.join(UPLOAD_DIR, filename);
       fs.writeFileSync(targetPath, bytes);
 
@@ -108,6 +161,7 @@ export const uploadRoutes = new Elysia({ name: "upload-routes" })
       return {
         url: `/api/v1/uploads/${filename}`,
         filename,
+        storage: "local" as const,
         mime: detected.mime,
         size: bytes.byteLength,
       };
@@ -130,20 +184,39 @@ export const uploadRoutes = new Elysia({ name: "upload-routes" })
         return { error: { code: "INVALID_FILENAME", message: "Invalid image filename" } };
       }
 
+      const ext = params.filename.split(".").pop()?.toLowerCase() ?? "png";
+      const fallbackMime = EXT_TO_MIME[ext] ?? "application/octet-stream";
+
+      const r2 = getR2Config();
+      if (r2) {
+        const key = buildR2ObjectKey(params.filename, r2.keyPrefix);
+        const remote = await getObjectFromR2(r2, key);
+        if (remote.ok) {
+          const headers: Record<string, string> = {
+            "Content-Type": remote.contentType || fallbackMime,
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+          };
+          if (remote.etag) headers.ETag = remote.etag;
+          return new Response(Buffer.from(remote.bytes), {
+            status: 200,
+            headers,
+          });
+        }
+      }
+
       const filePath = path.join(UPLOAD_DIR, params.filename);
       if (!fs.existsSync(filePath)) {
         set.status = 404;
         return { error: { code: "NOT_FOUND", message: "Image not found" } };
       }
 
-      const ext = params.filename.split(".").pop()?.toLowerCase() ?? "png";
-      const mime = EXT_TO_MIME[ext] ?? "application/octet-stream";
       const bytes = fs.readFileSync(filePath);
 
       return new Response(bytes, {
         status: 200,
         headers: {
-          "Content-Type": mime,
+          "Content-Type": fallbackMime,
           "Cache-Control": "public, max-age=31536000, immutable",
           "X-Content-Type-Options": "nosniff",
         },

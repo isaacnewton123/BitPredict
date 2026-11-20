@@ -14,6 +14,7 @@ import {
 } from "react-icons/lu";
 import { MarketCover } from "@/components/shared/MarketCover";
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   type BackendUserProfile,
   fetchMarketDetailBundle,
@@ -249,16 +250,32 @@ export function MarketTradingView({
 
   if (loading) {
     return (
-      <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-[14px] font-semibold text-[#686b82] hover:text-[#101114] mb-6 cursor-pointer"
+          className="inline-flex items-center gap-2 text-[14px] font-semibold text-[#686b82] hover:text-[#101114] cursor-pointer"
         >
           <LuArrowLeft className="w-4 h-4" />
           <span>Back to Markets</span>
         </Link>
-        <div className="bg-white border border-[#dedee5] rounded-[16px] p-12 text-center text-[15px] text-[#686b82] shadow-whisper">
-          Loading trading terminal, live order pools, and oracle proofs...
+        <div
+          aria-label="Loading market trading terminal"
+          className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-pulse"
+        >
+          <div className="lg:col-span-8 space-y-5">
+            <div className="bg-white border border-[#dedee5] rounded-[16px] p-6 space-y-4 shadow-whisper">
+              <div className="flex items-start gap-4">
+                <div className="w-16 h-16 rounded-[14px] bg-[rgba(148,151,169,0.16)] shrink-0" />
+                <div className="flex-1 space-y-2.5">
+                  <div className="h-4 w-44 rounded bg-[rgba(148,151,169,0.16)]" />
+                  <div className="h-6 w-full rounded bg-[rgba(148,151,169,0.2)]" />
+                  <div className="h-4 w-2/3 rounded bg-[rgba(148,151,169,0.14)]" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-white border border-[#dedee5] rounded-[16px] p-6 h-[320px] shadow-whisper" />
+          </div>
+          <div className="lg:col-span-4 bg-white border border-[#dedee5] rounded-[16px] p-6 h-[380px] shadow-whisper" />
         </div>
       </section>
     );
@@ -304,20 +321,18 @@ export function MarketTradingView({
   return (
     <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 text-[13px]">
+        <div className="flex items-center gap-2.5 text-[13px]">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-[#101114] bg-[rgba(148,151,169,0.08)] hover:bg-[rgba(133,91,251,0.16)] hover:text-[#7132f5] rounded-[10px] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-[#101114] bg-[rgba(148,151,169,0.08)] hover:bg-[rgba(133,91,251,0.14)] hover:text-[#7132f5] rounded-[10px] transition-colors cursor-pointer"
           >
             <LuArrowLeft className="w-4 h-4" />
             <span>Markets</span>
           </Link>
-          <span className="text-[#9497a9]">/</span>
-          <span className="font-semibold text-[#686b82]">{liveMarket.category}</span>
-          <span className="hidden sm:inline text-[#9497a9]">/</span>
-          <span className="hidden sm:inline font-mono text-[12px] text-[#9497a9] truncate max-w-[220px]">
-            {liveMarket.slug}
+          <span className="text-[#dedee5]" aria-hidden="true">
+            /
           </span>
+          <span className="font-semibold text-[#686b82]">{liveMarket.category}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -325,15 +340,15 @@ export function MarketTradingView({
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-semibold rounded-[8px] ${
               sseConnected
                 ? "bg-[rgba(20,158,97,0.14)] text-[#026b3f]"
-                : "bg-[rgba(104,107,130,0.12)] text-[#686b82]"
+                : "bg-[rgba(104,107,130,0.10)] text-[#686b82]"
             }`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-1.5 h-1.5 rounded-full ${
                 sseConnected ? "bg-[#149e61] animate-pulse" : "bg-[#9497a9]"
               }`}
             />
-            <span>{sseConnected ? "Live Pool Stream" : "Live Snapshot"}</span>
+            <span>{sseConnected ? "Live Stream" : "Snapshot"}</span>
           </span>
 
           <button
@@ -371,15 +386,15 @@ export function MarketTradingView({
                 size="lg"
               />
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-2.5 py-0.5 text-[12px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]">
+                <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                  <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.10)] text-[#484b5e] rounded-[6px]">
                     {liveMarket.category}
                   </span>
                   <span
                     className={
                       liveMarket.oracleTrack === "auto_api"
-                        ? "inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(20,158,97,0.16)] text-[#026b3f] rounded-[6px]"
-                        : "inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]"
+                        ? "inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(20,158,97,0.14)] text-[#026b3f] rounded-[6px]"
+                        : "inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.10)] text-[#484b5e] rounded-[6px]"
                     }
                   >
                     {liveMarket.oracleTrack === "auto_api" ? (
@@ -389,16 +404,11 @@ export function MarketTradingView({
                     )}
                     <span>{liveMarket.oracleLabel}</span>
                   </span>
-                  <span
-                    className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-[6px] ${
-                      isOpen
-                        ? "bg-[rgba(133,91,251,0.16)] text-[#7132f5]"
-                        : "bg-[rgba(104,107,130,0.14)] text-[#484b5e]"
-                    }`}
-                  >
-                    {liveMarket.status}
-                    {liveMarket.outcome ? ` · ${liveMarket.outcome}` : ""}
-                  </span>
+                  <StatusBadge
+                    status={liveMarket.status}
+                    outcome={liveMarket.outcome}
+                    size="sm"
+                  />
                 </div>
 
                 <h1 className="text-[22px] sm:text-[26px] font-bold text-[#101114] leading-[1.25] tracking-[-0.4px]">

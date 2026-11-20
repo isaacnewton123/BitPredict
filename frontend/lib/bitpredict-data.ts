@@ -614,6 +614,8 @@ export async function ensureBackendSession(): Promise<BackendUserProfile> {
 export async function uploadMarketImage(file: File): Promise<{
   url: string;
   filename: string;
+  key?: string;
+  storage?: "r2" | "local";
   mime: string;
   size: number;
 }> {
@@ -623,6 +625,8 @@ export async function uploadMarketImage(file: File): Promise<{
   return apiRequest<{
     url: string;
     filename: string;
+    key?: string;
+    storage?: "r2" | "local";
     mime: string;
     size: number;
   }>("/api/v1/uploads/market-image", {

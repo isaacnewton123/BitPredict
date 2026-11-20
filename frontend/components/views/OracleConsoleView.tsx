@@ -12,6 +12,7 @@ import {
   formatProviderName,
 } from "@/components/shared/OracleSpecSummary";
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   fetchOracleQueueFromBackend,
   formatPubkeyShort,
@@ -27,33 +28,6 @@ interface OracleConsoleViewProps {
   onRefreshMarkets: () => void;
   onNotify: (title: string, subtitle: string) => void;
 }
-
-const PUBLIC_STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  OPEN: {
-    label: "Open",
-    className: "bg-[rgba(104,107,130,0.12)] text-[#484b5e]",
-  },
-  CLOSED: {
-    label: "Betting Closed",
-    className: "bg-[rgba(104,107,130,0.12)] text-[#484b5e]",
-  },
-  PENDING_RESOLUTION: {
-    label: "Awaiting Verification",
-    className: "bg-[rgba(133,91,251,0.16)] text-[#7132f5]",
-  },
-  PROPOSED: {
-    label: "Challenge Window Active",
-    className: "bg-[rgba(20,158,97,0.16)] text-[#026b3f]",
-  },
-  DISPUTED: {
-    label: "Under Arbitration",
-    className: "bg-[rgba(220,38,38,0.12)] text-[#b91c1c]",
-  },
-  SETTLED: {
-    label: "Settled",
-    className: "bg-[rgba(20,158,97,0.16)] text-[#026b3f]",
-  },
-};
 
 /** Public Oracle Transparency Board showing automated feed status and community proposals. */
 export function OracleConsoleView({
@@ -165,15 +139,34 @@ export function OracleConsoleView({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="px-3.5 py-2 bg-[rgba(148,151,169,0.08)] border border-[#dedee5] rounded-[12px] text-[13px] text-[#686b82]">
-            Automated Feeds: <strong className="text-[#101114]">{trackAMarkets.length}</strong>
+        <div className="bg-white border border-[#dedee5] rounded-[14px] shadow-whisper grid grid-cols-3 divide-x divide-[#dedee5] shrink-0">
+          <div className="px-3.5 sm:px-5 py-2.5">
+            <p className="text-[11px] font-medium text-[#9497a9] uppercase tracking-[0.03em]">
+              Auto-API Feeds
+            </p>
+            <p className="mt-0.5 text-[15px] sm:text-[16px] font-bold text-[#026b3f] tabular-nums">
+              {trackAMarkets.length}
+            </p>
           </div>
-          <div className="px-3.5 py-2 bg-[rgba(148,151,169,0.08)] border border-[#dedee5] rounded-[12px] text-[13px] text-[#686b82]">
-            Community Markets: <strong className="text-[#101114]">{queue.length}</strong>
+          <div className="px-3.5 sm:px-5 py-2.5">
+            <p className="text-[11px] font-medium text-[#9497a9] uppercase tracking-[0.03em]">
+              Community
+            </p>
+            <p className="mt-0.5 text-[15px] sm:text-[16px] font-bold text-[#101114] tabular-nums">
+              {queue.length}
+            </p>
           </div>
-          <div className="px-3.5 py-2 bg-[rgba(148,151,169,0.08)] border border-[#dedee5] rounded-[12px] text-[13px] text-[#686b82]">
-            Under Arbitration: <strong className="text-[#101114]">{disputedCount}</strong>
+          <div className="px-3.5 sm:px-5 py-2.5">
+            <p className="text-[11px] font-medium text-[#9497a9] uppercase tracking-[0.03em]">
+              Arbitration
+            </p>
+            <p
+              className={`mt-0.5 text-[15px] sm:text-[16px] font-bold tabular-nums ${
+                disputedCount > 0 ? "text-[#b91c1c]" : "text-[#101114]"
+              }`}
+            >
+              {disputedCount}
+            </p>
           </div>
         </div>
       </div>
@@ -197,27 +190,19 @@ export function OracleConsoleView({
               const m = entry.market;
               const activeProp =
                 entry.proposals.find((p) => p.status === "ACTIVE") ?? entry.proposals[0];
-              const statusBadge = PUBLIC_STATUS_LABELS[m.status] ?? {
-                label: m.status,
-                className: "bg-[rgba(104,107,130,0.12)] text-[#484b5e]",
-              };
               const isDisputing = disputingId === m.id;
 
               return (
                 <article
                   key={m.id}
-                  className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper p-5 flex flex-col justify-between gap-4"
+                  className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper p-5 flex flex-col justify-between gap-4 card-interactive"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-1 text-[12px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]">
+                      <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.10)] text-[#484b5e] rounded-[6px]">
                         {m.category}
                       </span>
-                      <span
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-[6px] ${statusBadge.className}`}
-                      >
-                        {statusBadge.label}
-                      </span>
+                      <StatusBadge status={m.status} outcome={m.outcome} size="sm" />
                     </div>
 
                     <Link
@@ -325,7 +310,6 @@ export function OracleConsoleView({
                       (m.oracleConfig as { provider?: string }).provider ?? "auto-feed",
                     );
                     const condition = formatOracleCondition(m.oracleConfig) ?? "Auto Check";
-                    const resolved = m.status === "SETTLED" || m.status === "RESOLVED";
                     return (
                       <tr key={m.id} className="hover:bg-[rgba(148,151,169,0.03)]">
                         <td className="py-3.5 px-5 max-w-[320px]">
@@ -352,15 +336,7 @@ export function OracleConsoleView({
                           </span>
                         </td>
                         <td className="py-3.5 px-5 text-right whitespace-nowrap">
-                          <span
-                            className={
-                              resolved
-                                ? "px-2.5 py-1 text-[11px] font-semibold bg-[rgba(20,158,97,0.16)] text-[#026b3f] rounded-[6px]"
-                                : "px-2.5 py-1 text-[11px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[6px]"
-                            }
-                          >
-                            {resolved ? `Settled · ${m.outcome ?? "DONE"}` : "Monitoring"}
-                          </span>
+                          <StatusBadge status={m.status} outcome={m.outcome} size="sm" />
                         </td>
                       </tr>
                     );

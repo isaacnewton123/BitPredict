@@ -1,6 +1,7 @@
 "use client";
 
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   calculateBetQuote,
   formatSats,
@@ -63,9 +64,13 @@ export function OutcomePoolsCard({
 
   return (
     <div className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-[#dedee5] flex items-center justify-between text-[12px] font-semibold uppercase tracking-[0.04em] text-[#9497a9]">
+      <div className="px-5 py-3.5 border-b border-[#dedee5] flex flex-wrap items-center justify-between gap-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-[#9497a9]">
         <span>Outcome Pools (Parimutuel Liquidity)</span>
-        <span>Implied Odds / Payout Multiplier</span>
+        {isOpen ? (
+          <span>Implied Odds / Payout Multiplier</span>
+        ) : (
+          <StatusBadge status={market.status} outcome={market.outcome} size="sm" />
+        )}
       </div>
 
       <div className="divide-y divide-[#dedee5]">
@@ -104,20 +109,21 @@ export function OutcomePoolsCard({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-[20px] font-bold text-[#101114] tabular-nums w-[58px] text-right">
+              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                <span className="text-[20px] font-bold text-[#101114] tabular-nums sm:w-[58px] sm:text-right">
                   {row.pct.toFixed(0)}%
                 </span>
-                <button
-                  type="button"
-                  disabled={!isOpen}
-                  onClick={() => onSelectSide(row.side)}
-                  className={`px-4 py-2 text-[13px] font-semibold rounded-[10px] border transition-colors cursor-pointer disabled:opacity-45 ${
-                    selected ? row.btnActive : row.btnIdle
-                  }`}
-                >
-                  Buy {row.label}
-                </button>
+                {isOpen && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectSide(row.side)}
+                    className={`px-4 py-2 text-[13px] font-semibold rounded-[12px] border transition-colors cursor-pointer ${
+                      selected ? row.btnActive : row.btnIdle
+                    }`}
+                  >
+                    Buy {row.label}
+                  </button>
+                )}
               </div>
             </div>
           );

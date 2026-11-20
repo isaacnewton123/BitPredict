@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { useState } from "react";
 import { LuLayoutGrid } from "react-icons/lu";
 import { CATEGORY_ICONS } from "@/components/layout/route-utils";
 import type { CategoryId } from "@/lib/bitpredict-data";
@@ -38,13 +39,15 @@ export function MarketCover({
   alt = "",
   size = "md",
 }: MarketCoverProps) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const dims = SIZE_CLASSES[size];
 
-  if (imageUrl) {
+  if (imageUrl && failedUrl !== imageUrl) {
     return (
       <img
         src={imageUrl}
         alt={alt}
+        onError={() => setFailedUrl(imageUrl)}
         className={`${dims.box} object-cover border border-[#dedee5] bg-[rgba(148,151,169,0.08)] shrink-0`}
       />
     );

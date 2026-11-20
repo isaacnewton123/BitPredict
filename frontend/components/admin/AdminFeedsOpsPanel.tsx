@@ -7,6 +7,7 @@ import {
   formatProviderName,
 } from "@/components/shared/OracleSpecSummary";
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatSats, type MarketItem } from "@/lib/bitpredict-data";
 
 interface AdminFeedsOpsPanelProps {
@@ -96,15 +97,7 @@ export function AdminFeedsOpsPanel({
                         </span>
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span
-                          className={
-                            resolved
-                              ? "px-2.5 py-1 text-[11px] font-semibold bg-[rgba(20,158,97,0.16)] text-[#026b3f] rounded-[6px]"
-                              : "px-2.5 py-1 text-[11px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[6px]"
-                          }
-                        >
-                          {resolved ? `Settled · ${m.outcome ?? "DONE"}` : m.status}
-                        </span>
+                        <StatusBadge status={m.status} outcome={m.outcome} size="sm" />
                       </td>
                       <td className="py-3.5 px-5 text-right whitespace-nowrap">
                         {resolved ? (

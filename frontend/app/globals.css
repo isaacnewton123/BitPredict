@@ -23,12 +23,23 @@ html {
   font-family: var(--font-sans);
   color: #101114;
   background-color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background-color: #ffffff;
   color: #101114;
   font-family: var(--font-sans);
+}
+
+.card-interactive {
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.card-interactive:hover {
+  border-color: rgba(113, 50, 245, 0.45);
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.06);
 }
 
 .no-scrollbar::-webkit-scrollbar {

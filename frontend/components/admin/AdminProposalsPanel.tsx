@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { LuScale } from "react-icons/lu";
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   formatPubkeyShort,
   formatSats,
@@ -17,25 +18,6 @@ interface AdminProposalsPanelProps {
   onRequestPropose: (market: MarketItem, outcome: "YES" | "NO") => void;
   onRequestFinalize: (market: MarketItem) => void;
 }
-
-const STATUS_BADGE_MAP: Record<string, { label: string; className: string }> = {
-  OPEN: {
-    label: "Open",
-    className: "bg-[rgba(104,107,130,0.12)] text-[#484b5e]",
-  },
-  CLOSED: {
-    label: "Betting Closed",
-    className: "bg-[rgba(104,107,130,0.12)] text-[#484b5e]",
-  },
-  PENDING_RESOLUTION: {
-    label: "Awaiting Resolution",
-    className: "bg-[rgba(133,91,251,0.16)] text-[#7132f5]",
-  },
-  PROPOSED: {
-    label: "Proposal Active",
-    className: "bg-[rgba(20,158,97,0.16)] text-[#026b3f]",
-  },
-};
 
 /** Operator panel for proposing and finalizing community oracle outcomes. */
 export function AdminProposalsPanel({
@@ -65,27 +47,19 @@ export function AdminProposalsPanel({
         const market = entry.market;
         const activeProp =
           entry.proposals.find((p) => p.status === "ACTIVE") ?? entry.proposals[0];
-        const statusInfo = STATUS_BADGE_MAP[market.status] ?? {
-          label: market.status,
-          className: "bg-[rgba(104,107,130,0.12)] text-[#484b5e]",
-        };
         const isBusy = busyId === market.id;
 
         return (
           <article
             key={market.id}
-            className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper p-5 flex flex-col justify-between gap-4"
+            className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper p-5 flex flex-col justify-between gap-4 card-interactive"
           >
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="px-2.5 py-1 text-[12px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]">
+                <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.10)] text-[#484b5e] rounded-[6px]">
                   {market.category}
                 </span>
-                <span
-                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-[6px] ${statusInfo.className}`}
-                >
-                  {statusInfo.label}
-                </span>
+                <StatusBadge status={market.status} outcome={market.outcome} size="sm" />
               </div>
 
               <Link

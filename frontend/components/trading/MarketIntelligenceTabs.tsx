@@ -15,6 +15,7 @@ import {
   OracleSpecSummary,
 } from "@/components/shared/OracleSpecSummary";
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   canonicalizeJsonBrowser,
   formatPubkeyShort,
@@ -100,30 +101,49 @@ export function MarketIntelligenceTabs({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-[12px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[#9497a9]">
-                  1 · Betting Cutoff
-                </p>
-                <p className="text-[13px] font-semibold text-[#101114] mt-1">
-                  {formatUtcDisplay(liveMarket.bettingCutoffIso)}
-                </p>
-              </div>
-              <div className="p-3 rounded-[12px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[#9497a9]">
-                  2 · Event Deadline
-                </p>
-                <p className="text-[13px] font-semibold text-[#101114] mt-1">
-                  {liveMarket.deadline}
-                </p>
-              </div>
-              <div className="p-3 rounded-[12px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[#9497a9]">
-                  3 · Resolve After
-                </p>
-                <p className="text-[13px] font-semibold text-[#101114] mt-1">
-                  {formatUtcDisplay(String(liveMarket.spec.resolve_after_utc ?? ""))}
-                </p>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[#9497a9] mb-2.5">
+                Resolution Lifecycle
+              </p>
+              <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div
+                  aria-hidden="true"
+                  className="hidden sm:block absolute top-6 left-10 right-10 h-px bg-[#dedee5]"
+                />
+                {[
+                  {
+                    step: "1",
+                    title: "Betting Cutoff",
+                    value: formatUtcDisplay(liveMarket.bettingCutoffIso),
+                  },
+                  {
+                    step: "2",
+                    title: "Event Deadline",
+                    value: liveMarket.deadline,
+                  },
+                  {
+                    step: "3",
+                    title: "Earliest Resolution",
+                    value: formatUtcDisplay(String(liveMarket.spec.resolve_after_utc ?? "")),
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.step}
+                    className="relative p-3.5 rounded-[12px] border border-[#dedee5] bg-white flex items-start gap-2.5"
+                  >
+                    <span className="w-6 h-6 shrink-0 rounded-[8px] bg-[rgba(133,91,251,0.14)] text-[#7132f5] text-[12px] font-bold flex items-center justify-center">
+                      {item.step}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#9497a9]">
+                        {item.title}
+                      </p>
+                      <p className="text-[13px] font-semibold text-[#101114] mt-0.5 break-words">
+                        {item.value}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -346,10 +366,13 @@ export function MarketIntelligenceTabs({
                 {bundle.proposals.map((p) => (
                   <div
                     key={p.id}
-                    className="p-3 rounded-[10px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)] text-[12px] space-y-1"
+                    className="p-3 rounded-[10px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)] text-[12px] space-y-1.5"
                   >
-                    <div className="font-semibold text-[#101114]">
-                      Outcome: {p.outcome} ({p.status})
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-[#101114]">
+                        Proposed Outcome: {p.outcome}
+                      </span>
+                      <StatusBadge status={p.status} size="sm" />
                     </div>
                     <div className="font-mono text-[11px] text-[#686b82] truncate">
                       Verifier: {formatPubkeyShort(p.signerPubkey)}

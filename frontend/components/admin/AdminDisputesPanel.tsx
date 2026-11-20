@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { LuExternalLink, LuGavel, LuShieldCheck } from "react-icons/lu";
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   formatPubkeyShort,
   formatSats,
@@ -63,12 +64,10 @@ export function AdminDisputesPanel({
             <div className="space-y-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 text-[12px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]">
+                  <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-[rgba(104,107,130,0.10)] text-[#484b5e] rounded-[6px]">
                     {market.category}
                   </span>
-                  <span className="px-2.5 py-1 text-[11px] font-semibold bg-[rgba(220,38,38,0.12)] text-[#b91c1c] rounded-[6px]">
-                    Under Dispute
-                  </span>
+                  <StatusBadge status={market.status} outcome={market.outcome} size="sm" />
                 </div>
                 <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#101114] tabular-nums">
                   <SatsIcon className="w-3.5 h-3.5 shrink-0" />

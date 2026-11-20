@@ -65,6 +65,7 @@ export function BitPredictApp({
     ? (consumePendingTradeSide(selectedMarketSlug) ?? "YES")
     : "YES";
 
+  const [selectedStatus, setSelectedStatus] = useState<"all" | "open" | "closed">("all");
   const [selectedOracle, setSelectedOracle] = useState<"all" | "auto_api" | "nostr_oracle">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -161,6 +162,9 @@ export function BitPredictApp({
     const q = searchQuery.trim().toLowerCase();
     return markets.filter((m) => {
       const matchesCat = selectedCategory === "All" || m.category === selectedCategory;
+      const matchesStatus =
+        selectedStatus === "all" ||
+        (selectedStatus === "open" ? m.status === "OPEN" : m.status !== "OPEN");
       const matchesOracle = selectedOracle === "all" || m.oracleTrack === selectedOracle;
       const matchesSearch =
         !q ||
@@ -168,9 +172,9 @@ export function BitPredictApp({
         m.category.toLowerCase().includes(q) ||
         m.oracleLabel.toLowerCase().includes(q) ||
         m.rules.toLowerCase().includes(q);
-      return matchesCat && matchesOracle && matchesSearch;
+      return matchesCat && matchesStatus && matchesOracle && matchesSearch;
     });
-  }, [markets, selectedCategory, selectedOracle, searchQuery]);
+  }, [markets, selectedCategory, selectedStatus, selectedOracle, searchQuery]);
 
   const totalPoolVolume = useMemo(
     () => markets.reduce((sum, m) => sum + m.yesPool + m.noPool, 0),
@@ -295,6 +299,7 @@ export function BitPredictApp({
   }
 
   function resetAllFilters() {
+    setSelectedStatus("all");
     setSelectedOracle("all");
     setSearchQuery("");
     if (selectedCategory !== "All") {
@@ -321,8 +326,10 @@ export function BitPredictApp({
             totalPoolVolume={totalPoolVolume}
             autoApiCount={autoApiCount}
             selectedCategory={selectedCategory}
+            selectedStatus={selectedStatus}
             selectedOracle={selectedOracle}
             searchQuery={searchQuery}
+            onChangeStatus={setSelectedStatus}
             onChangeOracle={setSelectedOracle}
             onChangeSearch={setSearchQuery}
             onReload={loadMarkets}
@@ -344,6 +351,7 @@ export function BitPredictApp({
           <CreatorView
             onPublished={async (created) => {
               await loadMarkets();
+              setSelectedStatus("all");
               setSelectedOracle("all");
               setSearchQuery("");
               setPendingTradeSide(created.slug, "YES");

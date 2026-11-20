@@ -107,6 +107,28 @@ bun -e "import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'; cons
 | `DISPUTE_BOND_SATS` | `1000` | Lightning bond invoice amount required to submit a `kind 30080` dispute. |
 | `DEMO_MODE` | `true` | Enables `/api/v1/demo/seed`, simulated LNbits invoices/payouts when keys are blank, and fast oracle demo resolution triggers. Set `false` in production! |
 
+### Cloudflare R2 Image Storage (`R2_*`)
+
+Market cover image uploads (`POST /api/v1/uploads/market-image`) support **Cloudflare R2** object storage via S3-compatible AWS SigV4 requests, falling back to local disk (`app/data/uploads/`) when R2 credentials are blank (`STORAGE_DRIVER=auto`).
+
+1. Open **Cloudflare Dashboard → R2 Object Storage** and click **Create bucket** (e.g. `bitpredict-media`).
+2. Copy your **Cloudflare Account ID** from the right sidebar (`R2_ACCOUNT_ID`).
+3. Click **Manage R2 API Tokens → Create API token**, choose **Object Read & Write** scoped to your bucket, and copy **Access Key ID** (`R2_ACCESS_KEY_ID`) and **Secret Access Key** (`R2_SECRET_ACCESS_KEY`).
+4. To display images directly from Cloudflare's edge CDN: open **Bucket Settings → Public Development URL** (enable `r2.dev`) or connect a **Custom Domain** (e.g. `https://cdn.yourdomain.com`) and set it as `R2_PUBLIC_URL`.
+   - If `R2_PUBLIC_URL` is left blank, BitPredict keeps the bucket private and serves uploaded images through `GET /api/v1/uploads/:filename` using signed R2 requests.
+5. Set `STORAGE_DRIVER=r2` if you want to enforce R2 and reject uploads when credentials are missing.
+
+| Variable | Description |
+| --- | --- |
+| `STORAGE_DRIVER` | `auto` (use R2 when configured, else local disk) or `r2` (strictly require Cloudflare R2). |
+| `R2_ACCOUNT_ID` | Cloudflare 32-char Account ID used to build `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. |
+| `R2_ACCESS_KEY_ID` | R2 S3 API Token Access Key ID. |
+| `R2_SECRET_ACCESS_KEY` | R2 S3 API Token Secret Access Key (backend-only secret). |
+| `R2_BUCKET_NAME` | Target Cloudflare R2 bucket name. |
+| `R2_PUBLIC_URL` | Optional public `r2.dev` or custom CDN `https://` base URL returned directly after upload. |
+| `R2_KEY_PREFIX` | Optional object key prefix inside the bucket (defaults to `markets`). |
+| `R2_ENDPOINT` | Optional custom S3 endpoint override (e.g. EU/FedRAMP jurisdiction endpoint). |
+
 ---
 
 ## 3. Verifying Your Local Setup

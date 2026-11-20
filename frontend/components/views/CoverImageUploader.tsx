@@ -36,7 +36,12 @@ export function CoverImageUploader({
     try {
       const uploaded = await uploadMarketImage(file);
       await onImageUrlChanged(uploaded.url);
-      onNotify("Cover Image Ready", `${file.name} uploaded and attached to market spec.`);
+      onNotify(
+        uploaded.storage === "r2"
+          ? "Cover Image Uploaded to Cloudflare R2"
+          : "Cover Image Ready",
+        `${file.name} uploaded and attached to market spec.`,
+      );
     } catch (err) {
       onNotify(
         "Image Upload Failed",

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { LuKeyRound } from "react-icons/lu";
+import { LuArrowRight, LuKeyRound } from "react-icons/lu";
 import { SatsIcon } from "@/components/shared/SatsIcon";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   type BackendUserProfile,
   formatSats,
@@ -120,9 +121,7 @@ export function PositionsView({
                         : `Claim ${formatSats(pay.amount_sats)} sats`}
                     </button>
                   ) : (
-                    <span className="px-3 py-1.5 text-[12px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]">
-                      {pay.status}
-                    </span>
+                    <StatusBadge status={pay.status} kind="payout" size="md" />
                   )}
                 </div>
               </div>
@@ -140,10 +139,19 @@ export function PositionsView({
         </div>
 
         {positions.length === 0 ? (
-          <div className="p-8 text-center text-[14px] text-[#686b82]">
-            {user
-              ? "No bets placed yet with this Nostr keypair. Place YES/NO wagers on any OPEN market."
-              : "Sign in with Nostr to view and manage your active positions."}
+          <div className="p-8 text-center space-y-4">
+            <p className="text-[14px] text-[#686b82]">
+              {user
+                ? "No bets placed yet with this Nostr identity. Explore open markets to place a prediction."
+                : "Sign in with Nostr to view and manage your active positions."}
+            </p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] rounded-[12px] transition-colors cursor-pointer"
+            >
+              <span>Explore Markets</span>
+              <LuArrowRight className="w-4 h-4" />
+            </Link>
           </div>
         ) : (
           <div className="divide-y divide-[#dedee5]">
@@ -179,13 +187,11 @@ export function PositionsView({
 
                 <div className="flex items-center gap-2.5 shrink-0">
                   {pos.estimated_payout_sats != null && (
-                    <span className="text-[12px] font-semibold text-[#026b3f]">
+                    <span className="text-[12px] font-semibold text-[#026b3f] tabular-nums">
                       Est. {formatSats(pos.estimated_payout_sats)} sats
                     </span>
                   )}
-                  <span className="px-3 py-1.5 text-[12px] font-semibold bg-[rgba(104,107,130,0.12)] text-[#484b5e] rounded-[8px]">
-                    {pos.status}
-                  </span>
+                  <StatusBadge status={pos.status} kind="bet" size="sm" />
                 </div>
               </div>
             ))}

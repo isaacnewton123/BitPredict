@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SatsIcon } from "@/components/shared/SatsIcon";
 import {
   formatSats,
   formatUtcDisplay,
@@ -106,12 +107,13 @@ export function ProbabilityChartCard({
               <span>NO {(inspected?.pt.no_pct ?? noExactPct).toFixed(1)}%</span>
             </span>
             {inspected && (
-              <span className="text-[#686b82] font-normal tabular-nums">
-                Pool at point:{" "}
+              <span className="inline-flex items-center gap-1.5 text-[#686b82] font-normal tabular-nums">
+                <span>Pool at point:</span>
+                <SatsIcon className="w-3.5 h-3.5 shrink-0" />
                 <strong className="text-[#101114]">
                   {formatSats(inspected.pt.pool_sats)} sats
-                </strong>{" "}
-                · {formatUtcDisplay(inspected.pt.t)}
+                </strong>
+                <span>· {formatUtcDisplay(inspected.pt.t)}</span>
               </span>
             )}
           </div>

@@ -24,7 +24,7 @@ export function AppHeader({
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-[#dedee5]">
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 h-[72px] flex items-center justify-between gap-4">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 h-[68px] flex items-center justify-between gap-3 sm:gap-4">
         <Link
           href="/"
           aria-label="BitPredict home"
@@ -93,10 +93,15 @@ export function AppHeader({
             <LuKeyRound className="w-4 h-4" strokeWidth={2} />
             {user ? (
               <span className="font-mono">
-                {user.npub.slice(0, 10)}...{user.npub.slice(-4)}
+                {user.npub.slice(0, 8)}...{user.npub.slice(-4)}
               </span>
+            ) : connectingWallet ? (
+              <span>Signing...</span>
             ) : (
-              <span>{connectingWallet ? "Signing..." : "Sign In with Nostr"}</span>
+              <>
+                <span className="hidden sm:inline">Sign In with Nostr</span>
+                <span className="sm:hidden">Sign In</span>
+              </>
             )}
           </button>
         </div>
