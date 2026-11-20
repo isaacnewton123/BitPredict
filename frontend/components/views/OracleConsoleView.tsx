@@ -25,6 +25,7 @@ import {
 
 interface OracleConsoleViewProps {
   markets: MarketItem[];
+  activeEnv: "live" | "demo";
   onRefreshMarkets: () => void;
   onNotify: (title: string, subtitle: string) => void;
 }
@@ -32,6 +33,7 @@ interface OracleConsoleViewProps {
 /** Public Oracle Transparency Board showing automated feed status and community proposals. */
 export function OracleConsoleView({
   markets,
+  activeEnv,
   onRefreshMarkets,
   onNotify,
 }: OracleConsoleViewProps) {
@@ -43,18 +45,18 @@ export function OracleConsoleView({
   const loadQueue = useCallback(async () => {
     setLoadingQueue(true);
     try {
-      const items = await fetchOracleQueueFromBackend();
+      const items = await fetchOracleQueueFromBackend(activeEnv);
       setQueue(items);
     } catch {
       setQueue([]);
     } finally {
       setLoadingQueue(false);
     }
-  }, []);
+  }, [activeEnv]);
 
   useEffect(() => {
     let active = true;
-    fetchOracleQueueFromBackend()
+    fetchOracleQueueFromBackend(activeEnv)
       .then((items) => {
         if (active) setQueue(items);
       })
@@ -68,10 +70,11 @@ export function OracleConsoleView({
     return () => {
       active = false;
     };
-  }, []);
+  }, [activeEnv]);
 
   const trackAMarkets = markets.filter((m) => m.oracleTrack === "auto_api");
-  const disputedCount = queue.filter((q) => q.market.status === "DISPUTED").length;
+  const envQueue = queue.filter((q) => (activeEnv === "demo" ? q.market.isDemo : !q.market.isDemo));
+  const disputedCount = envQueue.filter((q) => q.market.status === "DISPUTED").length;
 
   async function confirmChallengeProposal() {
     if (!pendingDisputeEntry) return;
@@ -180,13 +183,13 @@ export function OracleConsoleView({
 
         {loadingQueue ? (
           <p className="text-[14px] text-[#686b82]">Loading oracle verification status...</p>
-        ) : queue.length === 0 ? (
+        ) : envQueue.length === 0 ? (
           <p className="text-[14px] text-[#686b82]">
             No active community oracle markets awaiting resolution.
           </p>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {queue.map((entry) => {
+            {envQueue.map((entry) => {
               const m = entry.market;
               const activeProp =
                 entry.proposals.find((p) => p.status === "ACTIVE") ?? entry.proposals[0];

@@ -21,19 +21,19 @@ interface MarketDiscoveryViewProps {
   filteredMarkets: MarketItem[];
   loadingMarkets: boolean;
   backendError: string | null;
+  activeEnv: "live" | "demo";
   totalPoolVolume: number;
   autoApiCount: number;
   selectedCategory: CategoryId;
-  selectedMode: "all" | "live" | "demo";
   selectedStatus: "all" | "open" | "closed";
   selectedOracle: "all" | "auto_api" | "nostr_oracle";
   searchQuery: string;
-  onChangeMode: (next: "all" | "live" | "demo") => void;
   onChangeStatus: (next: "all" | "open" | "closed") => void;
   onChangeOracle: (next: "all" | "auto_api" | "nostr_oracle") => void;
   onChangeSearch: (next: string) => void;
   onReload: () => void;
   onResetFilters: () => void;
+  onOpenConnectModal: () => void;
 }
 
 export function MarketDiscoveryView({
@@ -41,30 +41,43 @@ export function MarketDiscoveryView({
   filteredMarkets,
   loadingMarkets,
   backendError,
+  activeEnv,
   totalPoolVolume,
   autoApiCount,
   selectedCategory,
-  selectedMode,
   selectedStatus,
   selectedOracle,
   searchQuery,
-  onChangeMode,
   onChangeStatus,
   onChangeOracle,
   onChangeSearch,
   onReload,
   onResetFilters,
+  onOpenConnectModal,
 }: MarketDiscoveryViewProps) {
   return (
     <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
       {/* Header & Unified Metric Strip */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-6 border-b border-[#dedee5]">
         <div>
-          <h1 className="text-[30px] sm:text-[36px] font-bold leading-[1.22] tracking-[-0.5px] text-[#101114]">
-            Live Prediction Markets
-          </h1>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-[30px] sm:text-[36px] font-bold leading-[1.22] tracking-[-0.5px] text-[#101114]">
+              {activeEnv === "demo" ? "Demo Sandbox Markets" : "Live Prediction Markets"}
+            </h1>
+            <span
+              className={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.04em] rounded-[8px] ${
+                activeEnv === "demo"
+                  ? "bg-[rgba(133,91,251,0.14)] text-[#5741d8]"
+                  : "bg-[rgba(20,158,97,0.14)] text-[#026b3f]"
+              }`}
+            >
+              {activeEnv === "demo" ? "Demo · Play Money" : "Live · Real Sats"}
+            </span>
+          </div>
           <p className="text-[15px] text-[#686b82] mt-1">
-            Trade real-world outcomes settled transparently via automated feeds and Nostr oracles.
+            {activeEnv === "demo"
+              ? "Practice trading & AI market creation with simulated Lightning sats."
+              : "Trade real-world outcomes settled transparently via automated feeds and Nostr oracles."}
           </p>
         </div>
 
@@ -121,37 +134,6 @@ export function MarketDiscoveryView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Pool Mode Filter */}
-          <div
-            role="group"
-            aria-label="Filter by market pool mode"
-            className="inline-flex items-center gap-1 p-1 bg-[rgba(148,151,169,0.08)] rounded-[12px]"
-          >
-            {(
-              [
-                ["all", "All"],
-                ["live", "Live"],
-                ["demo", "Demo"],
-              ] as const
-            ).map(([modeKey, label]) => {
-              const active = selectedMode === modeKey;
-              return (
-                <button
-                  key={modeKey}
-                  type="button"
-                  onClick={() => onChangeMode(modeKey)}
-                  className={
-                    active
-                      ? "px-3 py-1.5 text-[13px] font-semibold rounded-[9px] bg-white text-[#101114] shadow-micro transition-colors cursor-pointer"
-                      : "px-3 py-1.5 text-[13px] font-medium rounded-[9px] text-[#686b82] hover:text-[#101114] transition-colors cursor-pointer"
-                  }
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Status Filter */}
           <div
             role="group"
@@ -304,24 +286,38 @@ export function MarketDiscoveryView({
             <LuSearchX className="w-6 h-6" />
           </div>
           <h3 className="text-[18px] font-semibold text-[#101114] mb-1">
-            No matching markets found
+            {markets.length === 0 && activeEnv === "live"
+              ? "No live markets yet"
+              : "No matching markets found"}
           </h3>
           <p className="text-[14px] text-[#686b82] mb-5">
-            Adjust your filters or create a new prediction market with AI.
+            {markets.length === 0 && activeEnv === "live"
+              ? "Publish the first real-sats market with AI or switch to the Demo Sandbox to explore simulated markets."
+              : "Adjust your filters or create a new prediction market with AI."}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2.5">
-            <button
-              type="button"
-              onClick={onResetFilters}
-              className="px-4 py-2.5 text-[14px] font-semibold text-[#5741d8] bg-white border border-[#5741d8] hover:bg-[rgba(133,91,251,0.08)] rounded-[12px] transition-colors cursor-pointer"
-            >
-              Reset Filters
-            </button>
+            {markets.length === 0 && activeEnv === "live" ? (
+              <button
+                type="button"
+                onClick={onOpenConnectModal}
+                className="px-4 py-2.5 text-[14px] font-semibold text-[#5741d8] bg-white border border-[#5741d8] hover:bg-[rgba(133,91,251,0.08)] rounded-[12px] transition-colors cursor-pointer"
+              >
+                Try Demo Account
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onResetFilters}
+                className="px-4 py-2.5 text-[14px] font-semibold text-[#5741d8] bg-white border border-[#5741d8] hover:bg-[rgba(133,91,251,0.08)] rounded-[12px] transition-colors cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            )}
             <Link
               href="/create"
               className="px-4 py-2.5 text-[14px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] rounded-[12px] transition-colors cursor-pointer"
             >
-              Open AI Creator
+              {markets.length === 0 && activeEnv === "live" ? "Create Live Market" : "Open AI Creator"}
             </Link>
           </div>
         </div>

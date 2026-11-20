@@ -18,7 +18,7 @@ declare global {
 }
 
 export type ConnectedLightningWallet =
-  | { kind: "webln"; label: string }
+  | { kind: "webln"; label: string; ownerPubkey?: string }
   | {
       kind: "nwc";
       label: string;
@@ -27,6 +27,7 @@ export type ConnectedLightningWallet =
       secretHex: string;
       lud16?: string;
       encryption: "nip44_v2" | "nip04";
+      ownerPubkey?: string;
     };
 
 const WALLET_STORAGE_KEY = "bp_ln_wallet_v1";
@@ -46,21 +47,11 @@ function notifyWalletListeners(): void {
   }
 }
 
-/** Subscribes to local Lightning wallet changes across this tab and storage events. */
+/** Subscribes to local Lightning wallet changes across this browser session. */
 export function subscribeWallet(listener: () => void): () => void {
   listeners.add(listener);
-  if (typeof window === "undefined") {
-    return () => listeners.delete(listener);
-  }
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === WALLET_STORAGE_KEY) {
-      notifyWalletListeners();
-    }
-  };
-  window.addEventListener("storage", onStorage);
   return () => {
     listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
   };
 }
 
@@ -69,10 +60,10 @@ export function getServerWalletSnapshot(): ConnectedLightningWallet | null {
   return null;
 }
 
-/** Reads the currently persisted client-side Lightning wallet without breaking SSR hydration. */
+/** Reads the currently persisted client-side Lightning wallet from sessionStorage. */
 export function getConnectedWallet(): ConnectedLightningWallet | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(WALLET_STORAGE_KEY);
+  const raw = window.sessionStorage.getItem(WALLET_STORAGE_KEY);
   if (raw === cachedRawWallet) {
     return cachedParsedWallet;
   }
@@ -96,22 +87,49 @@ export function getConnectedWallet(): ConnectedLightningWallet | null {
 
 function persistConnectedWallet(wallet: ConnectedLightningWallet | null): void {
   if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(WALLET_STORAGE_KEY);
+  } catch {
+    // ignore storage access issues
+  }
   if (wallet) {
     const raw = JSON.stringify(wallet);
-    window.localStorage.setItem(WALLET_STORAGE_KEY, raw);
+    window.sessionStorage.setItem(WALLET_STORAGE_KEY, raw);
     cachedRawWallet = raw;
     cachedParsedWallet = wallet;
   } else {
-    window.localStorage.removeItem(WALLET_STORAGE_KEY);
+    window.sessionStorage.removeItem(WALLET_STORAGE_KEY);
     cachedRawWallet = null;
     cachedParsedWallet = null;
   }
   notifyWalletListeners();
 }
 
-/** Disconnects the saved WebLN or NWC Lightning wallet from this browser. */
+/** Disconnects the saved WebLN or NWC Lightning wallet from this browser session. */
 export function disconnectLightningWallet(): void {
   persistConnectedWallet(null);
+}
+
+/** Ensures connected Lightning wallets stay strictly scoped to an active non-demo Nostr pubkey. */
+export function syncWalletWithAccount(
+  user: { pubkey: string; is_guest: boolean } | null,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(WALLET_STORAGE_KEY);
+  } catch {
+    // ignore storage access issues
+  }
+  const current = getConnectedWallet();
+  if (!current) return;
+  if (!user || user.is_guest) {
+    disconnectLightningWallet();
+    return;
+  }
+  const normalizedPubkey = user.pubkey.trim().toLowerCase();
+  if (!current.ownerPubkey || current.ownerPubkey !== normalizedPubkey) {
+    disconnectLightningWallet();
+  }
 }
 
 /** Returns true if a browser WebLN provider (e.g., Alby) is injected. */
@@ -128,8 +146,10 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-/** Connects to a browser WebLN provider and stores it locally for 1-click claims & payments. */
-export async function connectWebLnWallet(): Promise<ConnectedLightningWallet> {
+/** Connects to a browser WebLN provider and stores it for this Nostr session. */
+export async function connectWebLnWallet(
+  ownerPubkey?: string,
+): Promise<ConnectedLightningWallet> {
   if (typeof window === "undefined" || !window.webln) {
     throw new Error(
       "No WebLN browser extension detected. Install a WebLN wallet like Alby or connect via NWC.",
@@ -144,7 +164,12 @@ export async function connectWebLnWallet(): Promise<ConnectedLightningWallet> {
   } catch {
     // getInfo is optional on some WebLN providers
   }
-  const wallet: ConnectedLightningWallet = { kind: "webln", label };
+  const normalizedOwner = ownerPubkey?.trim().toLowerCase();
+  const wallet: ConnectedLightningWallet = {
+    kind: "webln",
+    label,
+    ...(normalizedOwner ? { ownerPubkey: normalizedOwner } : {}),
+  };
   persistConnectedWallet(wallet);
   return wallet;
 }
@@ -328,9 +353,10 @@ export async function sendNwcRpc<TResult = Record<string, unknown>>(
   }
 }
 
-/** Connects and verifies a NIP-47 Nostr Wallet Connect URI, keeping secrets strictly local. */
+/** Connects and verifies a NIP-47 Nostr Wallet Connect URI, keeping secrets strictly in sessionStorage. */
 export async function connectNwcWallet(
   rawUri: string,
+  ownerPubkey?: string,
 ): Promise<ConnectedLightningWallet> {
   const parsed = parseNwcUri(rawUri);
   const relay = await Relay.connect(parsed.relayUrl, { timeout: 6000 });
@@ -348,6 +374,7 @@ export async function connectNwcWallet(
     // keep default label
   }
 
+  const normalizedOwner = ownerPubkey?.trim().toLowerCase();
   const candidate: Extract<ConnectedLightningWallet, { kind: "nwc" }> = {
     kind: "nwc",
     label: parsed.lud16 || `NWC (${relayHost})`,
@@ -356,6 +383,7 @@ export async function connectNwcWallet(
     secretHex: parsed.secretHex,
     lud16: parsed.lud16,
     encryption,
+    ...(normalizedOwner ? { ownerPubkey: normalizedOwner } : {}),
   };
 
   try {

@@ -82,6 +82,7 @@ export function PositionsView({
         user={user}
         wallet={wallet}
         onSaveLightningAddress={onSaveLightningAddress}
+        onConnectAccount={onConnectNwc}
         onNotify={onNotify}
       />
 

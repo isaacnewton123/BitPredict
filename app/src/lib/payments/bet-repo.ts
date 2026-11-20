@@ -347,10 +347,16 @@ export async function listUserPositionsFromDb(
   db: LibSQLDatabase<typeof schema>,
   userPubkey: string,
   marketId?: string,
+  isDemo?: boolean,
 ) {
-  const where = marketId
-    ? and(eq(schema.bets.userPubkey, userPubkey.toLowerCase()), eq(schema.bets.marketId, marketId))
-    : eq(schema.bets.userPubkey, userPubkey.toLowerCase());
+  const conditions = [eq(schema.bets.userPubkey, userPubkey.toLowerCase())];
+  if (marketId) {
+    conditions.push(eq(schema.bets.marketId, marketId));
+  }
+  if (isDemo !== undefined) {
+    conditions.push(eq(schema.markets.isDemo, isDemo));
+  }
+  const where = conditions.length === 1 ? conditions[0] : and(...conditions);
 
   const rows = await db
     .select({

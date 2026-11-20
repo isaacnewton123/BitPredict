@@ -49,6 +49,7 @@ interface PendingConfirmation {
 interface AdminConsoleViewProps {
   user: BackendUserProfile | null;
   markets: MarketItem[];
+  activeEnv: "live" | "demo";
   seedingDemo: boolean;
   onConnectNwc: () => void;
   onRefreshMarkets: () => void;
@@ -60,6 +61,7 @@ interface AdminConsoleViewProps {
 export function AdminConsoleView({
   user,
   markets,
+  activeEnv,
   seedingDemo,
   onConnectNwc,
   onRefreshMarkets,
@@ -76,18 +78,18 @@ export function AdminConsoleView({
   const loadQueue = useCallback(async () => {
     setLoadingQueue(true);
     try {
-      const items = await fetchOracleQueueFromBackend();
+      const items = await fetchOracleQueueFromBackend(activeEnv);
       setQueue(items);
     } catch {
       setQueue([]);
     } finally {
       setLoadingQueue(false);
     }
-  }, []);
+  }, [activeEnv]);
 
   useEffect(() => {
     let active = true;
-    fetchOracleQueueFromBackend()
+    fetchOracleQueueFromBackend(activeEnv)
       .then((items) => {
         if (active) setQueue(items);
       })
@@ -100,16 +102,17 @@ export function AdminConsoleView({
     return () => {
       active = false;
     };
-  }, []);
+  }, [activeEnv]);
 
   const canActForMarket = (market: MarketItem) =>
     Boolean(user && (user.is_admin || (user.is_guest && market.isDemo)));
   const canSeedDemo = Boolean(user && (user.is_admin || user.is_guest));
 
-  const disputedEntries = queue.filter(
+  const envQueue = queue.filter((q) => (activeEnv === "demo" ? q.market.isDemo : !q.market.isDemo));
+  const disputedEntries = envQueue.filter(
     (e) => e.market.status === "DISPUTED" || e.disputes.some((d) => d.status === "OPEN"),
   );
-  const proposalEntries = queue.filter(
+  const proposalEntries = envQueue.filter(
     (e) =>
       e.market.status !== "DISPUTED" &&
       e.market.status !== "SETTLED" &&
@@ -488,6 +491,7 @@ export function AdminConsoleView({
       ) : (
         <AdminFeedsOpsPanel
           trackAMarkets={trackAMarkets}
+          activeEnv={activeEnv}
           canActForMarket={canActForMarket}
           canSeedDemo={canSeedDemo}
           busyId={busyId}

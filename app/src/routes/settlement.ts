@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { getOrGenerateEvidenceSummary } from "@/lib/ai/evidence";
 import { getCurrentUserFromRequest } from "@/lib/auth/server";
@@ -136,15 +136,23 @@ export const settlementRoutes = new Elysia({ name: "bitpredict-settlement", tags
     "/api/v1/oracle/queue",
     async ({ query, set }) => {
       const demoAllowed = process.env.DEMO_MODE !== "false";
-      const includeOpen = query.include_open === "true" || demoAllowed;
+      const includeOpen = query.include_open === "true" || query.mode === "demo" || demoAllowed;
       const statuses: MarketStatus[] = includeOpen
         ? ["OPEN", "CLOSED", "PENDING_RESOLUTION", "PROPOSED", "DISPUTED"]
         : ["PENDING_RESOLUTION", "PROPOSED", "DISPUTED"];
 
+      const conditions = [inArray(schema.markets.status, statuses)];
+      if (query.mode === "live") {
+        conditions.push(eq(schema.markets.isDemo, false));
+      } else if (query.mode === "demo") {
+        conditions.push(eq(schema.markets.isDemo, true));
+      }
+      const where = conditions.length === 1 ? conditions[0] : and(...conditions);
+
       const markets = await db
         .select()
         .from(schema.markets)
-        .where(inArray(schema.markets.status, statuses))
+        .where(where)
         .orderBy(desc(schema.markets.createdAt))
         .limit(40);
 
@@ -181,7 +189,10 @@ export const settlementRoutes = new Elysia({ name: "bitpredict-settlement", tags
       return { platform_pubkey: platformPubkey, queue: items };
     },
     {
-      query: t.Object({ include_open: t.Optional(t.String()) }),
+      query: t.Object({
+        include_open: t.Optional(t.String()),
+        mode: t.Optional(t.String()),
+      }),
       detail: {
         summary: "List Track B Nostr Oracle Signer queue with AI evidence briefs",
         tags: ["Oracles"],

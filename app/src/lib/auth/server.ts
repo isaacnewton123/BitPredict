@@ -35,14 +35,17 @@ export async function getCurrentUser(sessionToken?: string | null): Promise<User
 }
 
 export async function getCurrentUserFromRequest(request: Request): Promise<UserProfile | null> {
-  const cookieToken = parseCookieValue(request.headers.get("cookie"), SESSION_COOKIE_NAME);
-  if (cookieToken) {
-    return getCurrentUser(cookieToken);
-  }
   const auth = request.headers.get("authorization")?.trim();
   if (auth && /^Bearer\s+(.+)$/i.test(auth)) {
     const token = auth.replace(/^Bearer\s+/i, "").trim();
-    return getCurrentUser(token);
+    const user = await getCurrentUser(token);
+    if (user) {
+      return user;
+    }
+  }
+  const cookieToken = parseCookieValue(request.headers.get("cookie"), SESSION_COOKIE_NAME);
+  if (cookieToken) {
+    return getCurrentUser(cookieToken);
   }
   return null;
 }

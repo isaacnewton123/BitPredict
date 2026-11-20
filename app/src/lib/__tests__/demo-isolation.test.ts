@@ -554,5 +554,164 @@ describe("Production Demo Sandbox Isolation (DEMO_MODE=false)", () => {
       .from(schema.markets)
       .where(eq(schema.markets.isDemo, true));
     expect(demoMarketsAfterSeed.length).toBeGreaterThanOrEqual(6);
+
+    // Bearer authorization overrides a stale session cookie of another mode
+    const meOverrideRes = await handle(
+      new Request("http://localhost/api/v1/me", {
+        headers: {
+          cookie: `bp_session=${demoAuth.token}`,
+          authorization: `Bearer ${liveAuth.token}`,
+        },
+      }),
+    );
+    expect(meOverrideRes.status).toBe(200);
+    const meOverrideJson = (await meOverrideRes.json()) as {
+      user: { pubkey: string; is_guest: boolean };
+    };
+    expect(meOverrideJson.user.pubkey).toBe(liveAuth.pubkey);
+    expect(meOverrideJson.user.is_guest).toBe(false);
+
+    // Oracle queue scopes cleanly by ?mode=live vs ?mode=demo
+    const [liveQueueRes, demoQueueRes] = await Promise.all([
+      handle(new Request("http://localhost/api/v1/oracle/queue?include_open=true&mode=live")),
+      handle(new Request("http://localhost/api/v1/oracle/queue?include_open=true&mode=demo")),
+    ]);
+    expect(liveQueueRes.status).toBe(200);
+    expect(demoQueueRes.status).toBe(200);
+    const liveQueueJson = (await liveQueueRes.json()) as {
+      queue: Array<{ market: { id: string; isDemo: boolean } }>;
+    };
+    const demoQueueJson = (await demoQueueRes.json()) as {
+      queue: Array<{ market: { id: string; isDemo: boolean } }>;
+    };
+    expect(liveQueueJson.queue.some((q) => q.market.id === liveTrackB.id)).toBe(true);
+    expect(liveQueueJson.queue.every((q) => q.market.isDemo === false)).toBe(true);
+    expect(demoQueueJson.queue.length).toBeGreaterThan(0);
+    expect(demoQueueJson.queue.some((q) => q.market.id === liveTrackB.id)).toBe(false);
+    expect(demoQueueJson.queue.every((q) => q.market.isDemo === true)).toBe(true);
+
+    // Portfolio positions & payouts filter strictly by authenticated user mode
+    const syntheticLiveBetId = crypto.randomUUID();
+    const syntheticDemoBetId = crypto.randomUUID();
+    await db.insert(schema.bets).values([
+      {
+        id: syntheticLiveBetId,
+        marketId: liveTrackA.id,
+        userPubkey: demoAuth.pubkey,
+        side: "YES",
+        amountMsat: 100_000,
+        paymentHash: `h-${syntheticLiveBetId}`,
+        bolt11: "lnbc100n1psynthlive",
+        status: "CONFIRMED",
+        paidAt: new Date(),
+        createdAt: new Date(),
+      },
+      {
+        id: syntheticDemoBetId,
+        marketId: demoTrackA.id,
+        userPubkey: liveAuth.pubkey,
+        side: "NO",
+        amountMsat: 100_000,
+        paymentHash: `h-${syntheticDemoBetId}`,
+        bolt11: "lnbcsim100n1psynthdemo",
+        status: "CONFIRMED",
+        paidAt: new Date(),
+        createdAt: new Date(),
+      },
+    ]);
+    const syntheticLivePayoutId = crypto.randomUUID();
+    const syntheticDemoPayoutId = crypto.randomUUID();
+    await db.insert(schema.payouts).values([
+      {
+        id: syntheticLivePayoutId,
+        marketId: liveTrackA.id,
+        userPubkey: demoAuth.pubkey,
+        kind: "WIN",
+        amountMsat: 150_000,
+        status: "CLAIMABLE",
+        attempts: 0,
+        updatedAt: new Date(),
+      },
+      {
+        id: syntheticDemoPayoutId,
+        marketId: demoTrackA.id,
+        userPubkey: liveAuth.pubkey,
+        kind: "WIN",
+        amountMsat: 150_000,
+        status: "CLAIMABLE",
+        attempts: 0,
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const [livePosRes, demoPosRes, livePayRes, demoPayRes] = await Promise.all([
+      handle(
+        new Request("http://localhost/api/v1/me/positions", {
+          headers: { authorization: `Bearer ${liveAuth.token}` },
+        }),
+      ),
+      handle(
+        new Request("http://localhost/api/v1/me/positions", {
+          headers: { authorization: `Bearer ${demoAuth.token}` },
+        }),
+      ),
+      handle(
+        new Request("http://localhost/api/v1/me/payouts", {
+          headers: { authorization: `Bearer ${liveAuth.token}` },
+        }),
+      ),
+      handle(
+        new Request("http://localhost/api/v1/me/payouts", {
+          headers: { authorization: `Bearer ${demoAuth.token}` },
+        }),
+      ),
+    ]);
+    expect(livePosRes.status).toBe(200);
+    expect(demoPosRes.status).toBe(200);
+    expect(livePayRes.status).toBe(200);
+    expect(demoPayRes.status).toBe(200);
+
+    const livePosJson = (await livePosRes.json()) as {
+      positions: Array<{ bet_id: string; market: { isDemo: boolean } }>;
+    };
+    const demoPosJson = (await demoPosRes.json()) as {
+      positions: Array<{ bet_id: string; market: { isDemo: boolean } }>;
+    };
+    const livePayJson = (await livePayRes.json()) as {
+      payouts: Array<{ id: string; market: { isDemo: boolean } }>;
+    };
+    const demoPayJson = (await demoPayRes.json()) as {
+      payouts: Array<{ id: string; market: { isDemo: boolean } }>;
+    };
+    expect(livePosJson.positions.every((p) => p.market.isDemo === false)).toBe(true);
+    expect(livePosJson.positions.some((p) => p.bet_id === syntheticDemoBetId)).toBe(false);
+    expect(demoPosJson.positions.every((p) => p.market.isDemo === true)).toBe(true);
+    expect(demoPosJson.positions.some((p) => p.bet_id === syntheticLiveBetId)).toBe(false);
+    expect(livePayJson.payouts.every((p) => p.market.isDemo === false)).toBe(true);
+    expect(livePayJson.payouts.some((p) => p.id === syntheticDemoPayoutId)).toBe(false);
+    expect(demoPayJson.payouts.every((p) => p.market.isDemo === true)).toBe(true);
+    expect(demoPayJson.payouts.some((p) => p.id === syntheticLivePayoutId)).toBe(false);
+
+    // Live bet returns 502 with clear LNbits configuration guidance when LNBITS_URL is unset
+    const savedLnbitsUrl = process.env.LNBITS_URL;
+    process.env.LNBITS_URL = "";
+    try {
+      const noLnbitsBetRes = await handle(
+        new Request(`http://localhost/api/v1/markets/${liveTrackA.id}/bets`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${liveAuth.token}`,
+          },
+          body: JSON.stringify({ side: "YES", amount_sats: 1000 }),
+        }),
+      );
+      expect(noLnbitsBetRes.status).toBe(502);
+      const noLnbitsJson = (await noLnbitsBetRes.json()) as { error: { message: string } };
+      expect(noLnbitsJson.error.message).toContain("LNBITS_URL");
+      expect(noLnbitsJson.error.message).toContain("Demo Account");
+    } finally {
+      process.env.LNBITS_URL = savedLnbitsUrl;
+    }
   });
 });

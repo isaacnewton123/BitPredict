@@ -12,6 +12,7 @@ import { formatSats, type MarketItem } from "@/lib/bitpredict-data";
 
 interface AdminFeedsOpsPanelProps {
   trackAMarkets: MarketItem[];
+  activeEnv: "live" | "demo";
   canActForMarket: (market: MarketItem) => boolean;
   canSeedDemo: boolean;
   busyId: string | null;
@@ -23,6 +24,7 @@ interface AdminFeedsOpsPanelProps {
 /** Automated data-feed status table and workspace operations panel. */
 export function AdminFeedsOpsPanel({
   trackAMarkets,
+  activeEnv,
   canActForMarket,
   canSeedDemo,
   busyId,
@@ -134,32 +136,34 @@ export function AdminFeedsOpsPanel({
         )}
       </div>
 
-      {/* Workspace Operations */}
-      <div className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 shrink-0 rounded-[12px] bg-[rgba(133,91,251,0.14)] text-[#7132f5] flex items-center justify-center">
-            <LuDatabase className="w-5 h-5" />
+      {/* Workspace Operations (Demo Sandbox only) */}
+      {activeEnv === "demo" && (
+        <div className="bg-white border border-[#dedee5] rounded-[16px] shadow-whisper p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 shrink-0 rounded-[12px] bg-[rgba(133,91,251,0.14)] text-[#7132f5] flex items-center justify-center">
+              <LuDatabase className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-[16px] font-semibold text-[#101114]">
+                Demo Sandbox Seed &amp; Operations
+              </h3>
+              <p className="text-[13px] text-[#686b82] mt-0.5">
+                Populate showcase prediction markets across automated feeds and community oracles without overwriting existing markets.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-[16px] font-semibold text-[#101114]">
-              Workspace Seed &amp; Operations
-            </h3>
-            <p className="text-[13px] text-[#686b82] mt-0.5">
-              Populate showcase prediction markets across automated feeds and community oracles without overwriting existing markets.
-            </p>
-          </div>
-        </div>
 
-        <button
-          type="button"
-          disabled={!canSeedDemo || seedingDemo}
-          onClick={onRequestSeedDemo}
-          className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-[#026b3f] bg-[rgba(20,158,97,0.16)] hover:bg-[#149e61] hover:text-white disabled:opacity-45 rounded-[12px] transition-colors cursor-pointer"
-        >
-          <LuRefreshCw className="w-4 h-4" />
-          <span>{seedingDemo ? "Loading Showcase..." : "Load Showcase Markets"}</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            disabled={!canSeedDemo || seedingDemo}
+            onClick={onRequestSeedDemo}
+            className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-[#026b3f] bg-[rgba(20,158,97,0.16)] hover:bg-[#149e61] hover:text-white disabled:opacity-45 rounded-[12px] transition-colors cursor-pointer"
+          >
+            <LuRefreshCw className="w-4 h-4" />
+            <span>{seedingDemo ? "Loading Showcase..." : "Load Showcase Markets"}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

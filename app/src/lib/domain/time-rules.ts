@@ -9,7 +9,7 @@ export interface TimeRuleOptions {
   now?: Date;
   /** Minimum time between now and betting cutoff (default 60s). */
   minOpenMs?: number;
-  /** Maximum market horizon (default 365 days). */
+  /** Maximum market horizon (default 5 years to support multi-year events such as elections). */
   maxHorizonMs?: number;
 }
 
@@ -23,7 +23,7 @@ export function checkTimeRules(
 ): TimeRuleViolation[] {
   const now = (opts.now ?? new Date()).getTime();
   const minOpenMs = opts.minOpenMs ?? 60_000;
-  const maxHorizonMs = opts.maxHorizonMs ?? 365 * 24 * 3600 * 1000;
+  const maxHorizonMs = opts.maxHorizonMs ?? 5 * 365 * 24 * 3600 * 1000;
 
   const cutoff = Date.parse(spec.betting_cutoff_utc);
   const deadline = Date.parse(spec.deadline_utc);

@@ -406,6 +406,125 @@ describe("Prompt guardrails & Provider registry", () => {
       expect(invalid.errors.some((e) => e.includes("oracle_config.params.daily"))).toBe(true);
     }
   });
+
+  it("retries & recovers Politics/nostr_oracle election prompts and supports multi-year election horizons", async () => {
+    let calls = 0;
+    const electionSpec = {
+      title: "Indonesia Next Presidential Election Winner",
+      question: "In Indonesia, will President Prabowo win the next presidential election?",
+      category: "Politics",
+      resolution_track: "nostr_oracle",
+      rules:
+        "Resolves YES if KPU RI officially certifies President Prabowo Subianto as the winner of the next Indonesian presidential election by deadline_utc. Resolves NO otherwise.",
+      betting_cutoff_utc: "2029-02-13T23:59:00Z",
+      deadline_utc: "2029-03-31T23:59:00Z",
+      resolve_after_utc: "2029-04-01T12:00:00Z",
+      invalid_conditions: ["Election postponed past deadline_utc"],
+      assumptions: ["Evaluated against official KPU RI certification within 5-year horizon"],
+      oracle_config: {
+        signer_policy: "platform_signer",
+        suggested_sources: ["Official KPU RI (kpu.go.id)", "Reuters / Associated Press"],
+      },
+    };
+
+    const confusedThenValidFetch: FetchLike = async () => {
+      calls++;
+      const payload =
+        calls === 1
+          ? {
+              error:
+                "Politics category requires nostr_oracle resolution track, but user prompt requires a binary YES/NO answer about a future event that is creator-controlled and not objectively verifiable via auto_api providers.",
+            }
+          : electionSpec;
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(payload) } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const recovered = await compileMarketPrompt({
+      prompt: "In Indonesia, will President Prabowo win the next election?",
+      timezone: "Asia/Jakarta",
+      now: FIXED_NOW,
+      apiKey: "nvapi-test-key",
+      fetchFn: confusedThenValidFetch,
+    });
+    expect(calls).toBe(2);
+    expect(recovered.ok).toBe(true);
+    if (recovered.ok) {
+      expect(recovered.spec.category).toBe("Politics");
+      expect(recovered.spec.resolution_track).toBe("nostr_oracle");
+    }
+
+    // Falls back cleanly to rule compiler if LLM repeats the confused auto_api refusal twice
+    let repeatedCalls = 0;
+    const alwaysConfusedFetch: FetchLike = async () => {
+      repeatedCalls++;
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  error:
+                    "Politics category requires nostr_oracle resolution track and is not verifiable via auto_api providers.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+    const fallbackRes = await compileMarketPrompt({
+      prompt: "In Indonesia, will President Prabowo win the next election?",
+      timezone: "Asia/Jakarta",
+      now: FIXED_NOW,
+      apiKey: "nvapi-test-key",
+      fetchFn: alwaysConfusedFetch,
+    });
+    expect(repeatedCalls).toBe(2);
+    expect(fallbackRes.ok).toBe(true);
+    if (fallbackRes.ok) {
+      expect(fallbackRes.spec.category).toBe("Politics");
+      expect(fallbackRes.spec.resolution_track).toBe("nostr_oracle");
+      expect(fallbackRes.model).toContain("rule-fallback");
+    }
+
+    // Genuine subjective/unpredictable refusal still stops immediately without retry
+    let genuineCalls = 0;
+    const genuineRefusalFetch: FetchLike = async () => {
+      genuineCalls++;
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  error: "Purely subjective opinion with no objective public outcome.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+    const rejected = await compileMarketPrompt({
+      prompt: "Is blue the best color in the universe?",
+      timezone: "UTC",
+      now: FIXED_NOW,
+      apiKey: "nvapi-test-key",
+      fetchFn: genuineRefusalFetch,
+    });
+    expect(genuineCalls).toBe(1);
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) {
+      expect(rejected.code).toBe("AI_SPEC_REJECTED");
+    }
+  });
 });
 
 describe("Draft market persistence (createMarketDraft & updateMarketDraft)", () => {

@@ -1,6 +1,6 @@
 import * as nip19 from "nostr-tools/nip19";
 import { finalizeEvent, generateSecretKey, getPublicKey, type EventTemplate } from "nostr-tools/pure";
-import { payInvoiceWithConnectedWallet } from "./lightning-wallet";
+import { disconnectLightningWallet, payInvoiceWithConnectedWallet } from "./lightning-wallet";
 
 export type OracleTrack = "auto_api" | "nostr_oracle";
 export type MarketSide = "YES" | "NO";
@@ -235,12 +235,15 @@ const TOKEN_STORAGE_KEY = "bp_session_token";
 const GUEST_SK_STORAGE_KEY = "bp_guest_sk_hex";
 const SIGNER_SK_STORAGE_KEY = "bp_demo_signer_sk_hex";
 
-let cachedMarkets: MarketItem[] | null = null;
+const cachedMarketsByMode: Record<"live" | "demo", MarketItem[] | null> = {
+  live: null,
+  demo: null,
+};
 let cachedUser: BackendUserProfile | null = null;
 let pendingTradeSide: { slug: string; side: MarketSide } | null = null;
 
-export function getCachedMarkets(): MarketItem[] | null {
-  return cachedMarkets;
+export function getCachedMarkets(mode: "live" | "demo" = "live"): MarketItem[] | null {
+  return cachedMarketsByMode[mode];
 }
 
 export function getCachedUser(): BackendUserProfile | null {
@@ -468,17 +471,23 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
-export async function fetchMarketsFromBackend(): Promise<MarketItem[]> {
-  const res = await apiRequest<{ markets: Array<Record<string, unknown>> }>("/api/v1/markets");
-  if (res.markets.length === 0) {
-    // Auto-seed showcase demo data in backend database on first run when DB is empty
+export async function fetchMarketsFromBackend(
+  mode: "live" | "demo" = "live",
+): Promise<MarketItem[]> {
+  const res = await apiRequest<{ markets: Array<Record<string, unknown>> }>(
+    `/api/v1/markets?mode=${mode}`,
+  );
+  if (mode === "demo" && res.markets.length === 0) {
+    // Auto-seed showcase demo data only when browsing the Demo Sandbox and it is empty
     await apiRequest("/api/v1/demo/seed", { method: "POST" }).catch(() => null);
-    const seeded = await apiRequest<{ markets: Array<Record<string, unknown>> }>("/api/v1/markets");
-    cachedMarkets = seeded.markets.map(mapBackendMarket);
-    return cachedMarkets;
+    const seeded = await apiRequest<{ markets: Array<Record<string, unknown>> }>(
+      "/api/v1/markets?mode=demo",
+    );
+    cachedMarketsByMode.demo = seeded.markets.map(mapBackendMarket);
+    return cachedMarketsByMode.demo;
   }
-  cachedMarkets = res.markets.map(mapBackendMarket);
-  return cachedMarkets;
+  cachedMarketsByMode[mode] = res.markets.map(mapBackendMarket);
+  return cachedMarketsByMode[mode] ?? [];
 }
 
 export async function seedDemoMarketsOnBackend(): Promise<{
@@ -490,9 +499,11 @@ export async function seedDemoMarketsOnBackend(): Promise<{
     "/api/v1/demo/seed",
     { method: "POST" },
   );
-  const list = await apiRequest<{ markets: Array<Record<string, unknown>> }>("/api/v1/markets");
+  const list = await apiRequest<{ markets: Array<Record<string, unknown>> }>(
+    "/api/v1/markets?mode=demo",
+  );
   const mapped = list.markets.map(mapBackendMarket);
-  cachedMarkets = mapped;
+  cachedMarketsByMode.demo = mapped;
   return {
     created_markets: res.created_markets,
     skipped_markets: res.skipped_markets,
@@ -605,6 +616,7 @@ export async function logoutFromBackend(): Promise<void> {
   await apiRequest("/api/v1/auth/logout", { method: "POST" }).catch(() => null);
   setStoredToken(null);
   cachedUser = null;
+  disconnectLightningWallet();
 }
 
 export async function ensureBackendSession(): Promise<BackendUserProfile> {
@@ -850,7 +862,9 @@ export async function claimBackendPayout(payoutId: string, bolt11?: string): Pro
   });
 }
 
-export async function fetchOracleQueueFromBackend(): Promise<OracleQueueEntry[]> {
+export async function fetchOracleQueueFromBackend(
+  mode: "live" | "demo" = "live",
+): Promise<OracleQueueEntry[]> {
   const res = await apiRequest<{
     queue: Array<{
       market: Record<string, unknown>;
@@ -858,7 +872,7 @@ export async function fetchOracleQueueFromBackend(): Promise<OracleQueueEntry[]>
       proposals: TrackBProposalRecord[];
       disputes: TrackBDisputeRecord[];
     }>;
-  }>("/api/v1/oracle/queue?include_open=true");
+  }>(`/api/v1/oracle/queue?include_open=true&mode=${mode}`);
 
   return res.queue.map((q) => ({
     market: mapBackendMarket(q.market),

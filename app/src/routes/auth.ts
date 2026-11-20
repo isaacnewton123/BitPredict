@@ -186,7 +186,7 @@ export const authRoutes = new Elysia({ name: "bitpredict-auth", tags: ["Auth & P
         return { error: { code: "UNAUTHORIZED", message: "Not logged in" } };
       }
       set.headers["cache-control"] = "no-store";
-      const positions = await listUserPositionsFromDb(db, user.pubkey, query.market_id);
+      const positions = await listUserPositionsFromDb(db, user.pubkey, query.market_id, user.is_guest);
       return { positions };
     },
     {
@@ -208,7 +208,7 @@ export const authRoutes = new Elysia({ name: "bitpredict-auth", tags: ["Auth & P
         return { error: { code: "UNAUTHORIZED", message: "Not logged in" } };
       }
       set.headers["cache-control"] = "no-store";
-      const payouts = await listUserPayoutsFromDb(db, user.pubkey, query.market_id);
+      const payouts = await listUserPayoutsFromDb(db, user.pubkey, query.market_id, user.is_guest);
       return { payouts };
     },
     {

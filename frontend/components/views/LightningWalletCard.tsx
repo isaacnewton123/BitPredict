@@ -25,6 +25,7 @@ interface LightningWalletCardProps {
   user: BackendUserProfile | null;
   wallet: ConnectedLightningWallet | null;
   onSaveLightningAddress: (addr: string) => Promise<void>;
+  onConnectAccount?: () => void;
   onNotify: (title: string, subtitle: string) => void;
 }
 
@@ -33,6 +34,7 @@ export function LightningWalletCard({
   user,
   wallet,
   onSaveLightningAddress,
+  onConnectAccount,
   onNotify,
 }: LightningWalletCardProps) {
   const [showNwcForm, setShowNwcForm] = useState(false);
@@ -56,9 +58,16 @@ export function LightningWalletCard({
   const autoPayoutOpen = manualAutoOpen ?? Boolean(user?.lightning_address);
 
   async function handleConnectWebLn() {
+    if (!user || user.is_guest) {
+      onNotify(
+        "Live Nostr Account Required",
+        "Connect a Live Nostr account before linking a real Lightning wallet.",
+      );
+      return;
+    }
     setConnectingWebLn(true);
     try {
-      const connected = await connectWebLnWallet();
+      const connected = await connectWebLnWallet(user.pubkey);
       onNotify(
         "Lightning Wallet Connected",
         `${connected.label} is ready for direct 1-click claims and payments.`,
@@ -74,13 +83,20 @@ export function LightningWalletCard({
   }
 
   async function handleConnectNwc() {
+    if (!user || user.is_guest) {
+      onNotify(
+        "Live Nostr Account Required",
+        "Connect a Live Nostr account before linking an NWC wallet.",
+      );
+      return;
+    }
     if (!nwcUri.trim()) {
       onNotify("Enter NWC URI", "Paste your nostr+walletconnect:// connection string.");
       return;
     }
     setConnectingNwc(true);
     try {
-      const connected = await connectNwcWallet(nwcUri);
+      const connected = await connectNwcWallet(nwcUri, user.pubkey);
       setNwcUri("");
       setShowNwcForm(false);
       if (
@@ -181,7 +197,47 @@ export function LightningWalletCard({
           )}
         </div>
 
-        {wallet ? (
+        {!user ? (
+          <div className="p-4 rounded-[12px] border border-[#dedee5] bg-[rgba(148,151,169,0.06)] flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-[13px] font-semibold text-[#101114]">
+                Sign in with a Live Nostr Account
+              </div>
+              <p className="text-[12px] text-[#686b82]">
+                Wallet connections are scoped per session and automatically cleared on logout.
+              </p>
+            </div>
+            {onConnectAccount && (
+              <button
+                type="button"
+                onClick={onConnectAccount}
+                className="px-3.5 py-2 text-[12px] font-semibold text-white bg-[#7132f5] hover:bg-[#5b1ecf] rounded-[10px] transition-colors cursor-pointer"
+              >
+                Connect Live Nostr Account
+              </button>
+            )}
+          </div>
+        ) : user.is_guest ? (
+          <div className="p-4 rounded-[12px] border border-[rgba(133,91,251,0.28)] bg-[rgba(133,91,251,0.08)] flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-[13px] font-semibold text-[#5741d8]">
+                Demo Sandbox · Simulated Lightning
+              </div>
+              <p className="text-[12px] text-[#686b82]">
+                Demo accounts use simulated invoices and instant play-money payouts, so real NWC/WebLN wallets stay disconnected here.
+              </p>
+            </div>
+            {onConnectAccount && (
+              <button
+                type="button"
+                onClick={onConnectAccount}
+                className="px-3.5 py-2 text-[12px] font-semibold text-[#5741d8] bg-white border border-[#5741d8] hover:bg-[rgba(133,91,251,0.08)] rounded-[10px] transition-colors cursor-pointer"
+              >
+                Switch to Live Account
+              </button>
+            )}
+          </div>
+        ) : wallet ? (
           <div className="p-3.5 rounded-[12px] border border-[rgba(20,158,97,0.28)] bg-[rgba(20,158,97,0.08)] flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold bg-[#149e61] text-white rounded-[8px]">
@@ -249,7 +305,7 @@ export function LightningWalletCard({
                 <p className="text-[11px] text-[#686b82] inline-flex items-center gap-1.5">
                   <LuShieldCheck className="w-3.5 h-3.5 text-[#149e61] shrink-0" />
                   <span>
-                    Your connection secret stays in this browser and is never sent to our servers.
+                    Your connection secret stays in this browser session and is never sent to our servers.
                   </span>
                 </p>
               </div>
@@ -259,7 +315,8 @@ export function LightningWalletCard({
       </div>
 
       {/* Optional Offline Auto-Payout (LUD-16) */}
-      <div className="pt-4 border-t border-[#dedee5]">
+      {user && !user.is_guest && (
+        <div className="pt-4 border-t border-[#dedee5]">
         <button
           type="button"
           onClick={() => setManualAutoOpen(!autoPayoutOpen)}
@@ -320,6 +377,7 @@ export function LightningWalletCard({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

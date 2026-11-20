@@ -48,6 +48,12 @@ const OPERATOR_ALIASES: Record<string, string> = {
   not_equals: "!=",
 };
 
+function isConfusedOracleRejection(reason: string): boolean {
+  return /\b(auto_api|nostr_oracle|auto-api|provider|creator-controlled|not objectively verifiable)\b/i.test(
+    reason,
+  );
+}
+
 function isPlainRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
@@ -199,6 +205,28 @@ export async function compileMarketPrompt(opts: {
 
     if (raw && typeof raw === "object" && "error" in raw && typeof (raw as { error: unknown }).error === "string") {
       const reason = (raw as { error: string }).error;
+      if (isConfusedOracleRejection(reason)) {
+        if (attempt === 0) {
+          previousErrors = [
+            `Do NOT reject this prompt ("${reason}"). Public events such as elections, legislation, court rulings, or sports are valid prediction markets and are NOT creator-controlled. When auto_api providers do not cover the event, compile a valid MarketSpec using resolution_track="nostr_oracle" with oracle_config={ "signer_policy": "platform_signer", "suggested_sources": [...] } and timestamps within 5 years.`,
+          ];
+          continue;
+        }
+        const fallbackDraft = compilePromptRuleBased(guard.prompt, { now, timezone: userTz });
+        const fallbackValidated = validateFullMarketSpec(fallbackDraft, { now });
+        if (fallbackValidated.ok) {
+          return {
+            ok: true,
+            spec: fallbackValidated.spec,
+            specSha256: fallbackValidated.specSha256,
+            auditUrl: fallbackValidated.auditUrl,
+            warnings: fallbackValidated.warnings,
+            model: `${model} (rule-fallback)`,
+            promptSha256,
+            latencyMs: Math.round(performance.now() - started),
+          };
+        }
+      }
       return {
         ok: false,
         code: "AI_SPEC_REJECTED",

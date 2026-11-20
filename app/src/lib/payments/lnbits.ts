@@ -100,7 +100,9 @@ export async function createLightningInvoice(opts: {
   }
 
   if (process.env.DEMO_MODE === "false") {
-    throw new Error("LNBITS_URL and LNBITS_INVOICE_KEY must be configured when DEMO_MODE is disabled");
+    throw new Error(
+      "Live Lightning payments require LNBITS_URL and LNBITS_INVOICE_KEY in .env when DEMO_MODE=false. Configure LNbits or switch to a Demo Account.",
+    );
   }
 
   const paymentHash = randomBytes(32).toString("hex");
@@ -241,7 +243,10 @@ export async function requestInvoiceFromLightningAddress(
   }
 
   if (process.env.DEMO_MODE === "false") {
-    return { ok: false, error: "LNBITS_URL and LNBITS_ADMIN_KEY must be configured for payouts" };
+    return {
+      ok: false,
+      error: "Live Lightning payouts require LNBITS_URL and LNBITS_ADMIN_KEY in .env when DEMO_MODE=false.",
+    };
   }
 
   const hash = createHash("sha256").update(`out:${normalized}:${amountMsat}:${Date.now()}`).digest("hex");
@@ -279,7 +284,7 @@ export async function payLightningInvoice(
 
   if ((opts.fetchFn || (baseUrl && adminKey)) && !trimmed.startsWith("lnbcsim")) {
     if (!baseUrl || !adminKey) {
-      return { ok: false, error: "LNBITS_URL and LNBITS_ADMIN_KEY are required to pay live invoices" };
+      return { ok: false, error: "Live Lightning payouts require LNBITS_URL and LNBITS_ADMIN_KEY in .env." };
     }
     const fetchImpl = opts.fetchFn ?? fetch;
     try {

@@ -27,7 +27,7 @@ import {
   type UserPayoutItem,
   type UserPositionItem,
 } from "@/lib/bitpredict-data";
-import { fetchNostrProfileLud16 } from "@/lib/lightning-wallet";
+import { fetchNostrProfileLud16, syncWalletWithAccount } from "@/lib/lightning-wallet";
 import { useConnectedWallet } from "@/lib/use-connected-wallet";
 import { ConnectAccountModal } from "./auth/ConnectAccountModal";
 import { AppFooter } from "./layout/AppFooter";
@@ -68,17 +68,18 @@ export function BitPredictApp({
     ? (consumePendingTradeSide(selectedMarketSlug) ?? "YES")
     : "YES";
 
-  const [selectedMode, setSelectedMode] = useState<"all" | "live" | "demo">("all");
   const [selectedStatus, setSelectedStatus] = useState<"all" | "open" | "closed">("all");
   const [selectedOracle, setSelectedOracle] = useState<"all" | "auto_api" | "nostr_oracle">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [markets, setMarkets] = useState<MarketItem[]>(() => getCachedMarkets() ?? []);
-  const [loadingMarkets, setLoadingMarkets] = useState(() => getCachedMarkets() === null);
+  const [user, setUser] = useState<BackendUserProfile | null>(() => getCachedUser());
+  const activeEnv: "live" | "demo" = user?.is_guest ? "demo" : "live";
+
+  const [markets, setMarkets] = useState<MarketItem[]>(() => getCachedMarkets(activeEnv) ?? []);
+  const [loadingMarkets, setLoadingMarkets] = useState(() => getCachedMarkets(activeEnv) === null);
   const [backendError, setBackendError] = useState<string | null>(null);
   const [seedingDemo, setSeedingDemo] = useState(false);
 
-  const [user, setUser] = useState<BackendUserProfile | null>(() => getCachedUser());
   const wallet = useConnectedWallet();
   const [connectingWallet, setConnectingWallet] = useState(false);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
@@ -95,24 +96,29 @@ export function BitPredictApp({
     }, 3600);
   }, []);
 
-  const loadMarkets = useCallback(async () => {
-    setLoadingMarkets(true);
-    setBackendError(null);
-    try {
-      const data = await fetchMarketsFromBackend();
-      setMarkets(data);
-    } catch (err) {
-      setBackendError(
-        err instanceof Error ? err.message : "Unable to connect to the market service",
-      );
-    } finally {
-      setLoadingMarkets(false);
-    }
-  }, []);
+  const loadMarkets = useCallback(
+    async (envOverride?: "live" | "demo") => {
+      const targetEnv = envOverride ?? activeEnv;
+      setLoadingMarkets(true);
+      setBackendError(null);
+      try {
+        const data = await fetchMarketsFromBackend(targetEnv);
+        setMarkets(data);
+      } catch (err) {
+        setBackendError(
+          err instanceof Error ? err.message : "Unable to connect to the market service",
+        );
+      } finally {
+        setLoadingMarkets(false);
+      }
+    },
+    [activeEnv],
+  );
 
   const loadSessionAndPortfolio = useCallback(async () => {
     try {
       const current = await getCurrentBackendUser();
+      syncWalletWithAccount(current);
       setUser(current);
       if (current) {
         const res = await fetchUserPositionsAndPayouts();
@@ -129,7 +135,7 @@ export function BitPredictApp({
 
   useEffect(() => {
     let active = true;
-    fetchMarketsFromBackend()
+    fetchMarketsFromBackend(activeEnv)
       .then((data) => {
         if (!active) return;
         setMarkets(data);
@@ -145,11 +151,24 @@ export function BitPredictApp({
         if (active) setLoadingMarkets(false);
       });
 
+    return () => {
+      active = false;
+    };
+  }, [activeEnv]);
+
+  useEffect(() => {
+    let active = true;
     getCurrentBackendUser()
       .then(async (current) => {
         if (!active) return;
+        syncWalletWithAccount(current);
         setUser(current);
         if (current) {
+          if (current.is_guest) {
+            const cachedDemo = getCachedMarkets("demo");
+            setMarkets(cachedDemo ?? []);
+            setLoadingMarkets(cachedDemo === null);
+          }
           const res = await fetchUserPositionsAndPayouts();
           if (active) {
             setPositions(res.positions);
@@ -164,12 +183,15 @@ export function BitPredictApp({
     };
   }, []);
 
+  const envMarkets = useMemo(
+    () => markets.filter((m) => (activeEnv === "demo" ? m.isDemo : !m.isDemo)),
+    [markets, activeEnv],
+  );
+
   const filteredMarkets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return markets.filter((m) => {
+    return envMarkets.filter((m) => {
       const matchesCat = selectedCategory === "All" || m.category === selectedCategory;
-      const matchesMode =
-        selectedMode === "all" || (selectedMode === "demo" ? m.isDemo : !m.isDemo);
       const matchesStatus =
         selectedStatus === "all" ||
         (selectedStatus === "open" ? m.status === "OPEN" : m.status !== "OPEN");
@@ -180,35 +202,37 @@ export function BitPredictApp({
         m.category.toLowerCase().includes(q) ||
         m.oracleLabel.toLowerCase().includes(q) ||
         m.rules.toLowerCase().includes(q);
-      return matchesCat && matchesMode && matchesStatus && matchesOracle && matchesSearch;
+      return matchesCat && matchesStatus && matchesOracle && matchesSearch;
     });
-  }, [markets, selectedCategory, selectedMode, selectedStatus, selectedOracle, searchQuery]);
+  }, [envMarkets, selectedCategory, selectedStatus, selectedOracle, searchQuery]);
 
   const totalPoolVolume = useMemo(
-    () => markets.reduce((sum, m) => sum + m.yesPool + m.noPool, 0),
-    [markets],
+    () => envMarkets.reduce((sum, m) => sum + m.yesPool + m.noPool, 0),
+    [envMarkets],
   );
   const autoApiCount = useMemo(
-    () => markets.filter((m) => m.oracleTrack === "auto_api").length,
-    [markets],
+    () => envMarkets.filter((m) => m.oracleTrack === "auto_api").length,
+    [envMarkets],
   );
 
   async function handleLoginMode(mode: "live" | "demo") {
     setConnectingWallet(true);
     try {
       const logged = await loginWithNostrToBackend(mode);
+      syncWalletWithAccount(logged.user);
       setUser(logged.user);
 
-      if (mode === "demo" && !markets.some((m) => m.isDemo)) {
-        await seedDemoMarketsOnBackend()
-          .then((seeded) => {
-            setMarkets(seeded.markets);
-            setBackendError(null);
-          })
-          .catch(() => undefined);
-      }
+      const cached = getCachedMarkets(mode);
+      setMarkets(cached ?? []);
+      setLoadingMarkets(cached === null);
 
-      const res = await fetchUserPositionsAndPayouts();
+      const [nextMarkets, res] = await Promise.all([
+        fetchMarketsFromBackend(mode),
+        fetchUserPositionsAndPayouts(),
+      ]);
+      setMarkets(nextMarkets);
+      setLoadingMarkets(false);
+      setBackendError(null);
       setPositions(res.positions);
       setPayouts(res.payouts);
       showToast(
@@ -246,6 +270,9 @@ export function BitPredictApp({
     setUser(null);
     setPositions([]);
     setPayouts([]);
+    const liveCached = getCachedMarkets("live");
+    setMarkets(liveCached ?? []);
+    setLoadingMarkets(liveCached === null);
     showToast("Session Signed Out", "Connect a Live Nostr or Demo Account anytime.");
   }
 
@@ -347,7 +374,6 @@ export function BitPredictApp({
   }
 
   function resetAllFilters() {
-    setSelectedMode("all");
     setSelectedStatus("all");
     setSelectedOracle("all");
     setSearchQuery("");
@@ -369,23 +395,23 @@ export function BitPredictApp({
       <main className="flex-1">
         {activeView === "markets" && (
           <MarketDiscoveryView
-            markets={markets}
+            markets={envMarkets}
             filteredMarkets={filteredMarkets}
             loadingMarkets={loadingMarkets}
             backendError={backendError}
+            activeEnv={activeEnv}
             totalPoolVolume={totalPoolVolume}
             autoApiCount={autoApiCount}
             selectedCategory={selectedCategory}
-            selectedMode={selectedMode}
             selectedStatus={selectedStatus}
             selectedOracle={selectedOracle}
             searchQuery={searchQuery}
-            onChangeMode={setSelectedMode}
             onChangeStatus={setSelectedStatus}
             onChangeOracle={setSelectedOracle}
             onChangeSearch={setSearchQuery}
             onReload={loadMarkets}
             onResetFilters={resetAllFilters}
+            onOpenConnectModal={() => setConnectModalOpen(true)}
           />
         )}
 
@@ -408,8 +434,7 @@ export function BitPredictApp({
             user={user}
             onOpenConnectModal={() => setConnectModalOpen(true)}
             onPublished={async (created) => {
-              await loadMarkets();
-              setSelectedMode("all");
+              await loadMarkets(created.isDemo ? "demo" : "live");
               setSelectedStatus("all");
               setSelectedOracle("all");
               setSearchQuery("");
@@ -428,7 +453,8 @@ export function BitPredictApp({
 
         {activeView === "oracle" && (
           <OracleConsoleView
-            markets={markets}
+            markets={envMarkets}
+            activeEnv={activeEnv}
             onRefreshMarkets={loadMarkets}
             onNotify={showToast}
           />
@@ -449,7 +475,8 @@ export function BitPredictApp({
         {activeView === "admin" && (
           <AdminConsoleView
             user={user}
-            markets={markets}
+            markets={envMarkets}
+            activeEnv={activeEnv}
             seedingDemo={seedingDemo}
             onConnectNwc={() => setConnectModalOpen(true)}
             onRefreshMarkets={loadMarkets}
