@@ -25,3 +25,6 @@ Thumbs.db
 
 # test / coverage
 coverage/
+
+# local agent skills
+.agents/
